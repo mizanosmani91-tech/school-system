@@ -1,5 +1,5 @@
 <?php
-require_once '../../includes/functions.php';
+require_once '../includes/functions.php';
 requireLogin(['super_admin','principal','teacher']);
 
 header('Content-Type: application/json');
