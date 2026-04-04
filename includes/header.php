@@ -320,11 +320,26 @@ if (isset($parentLayout) && $parentLayout) {
         <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item">
             <i class="fas fa-clipboard-check"></i> উপস্থিতি
         </a>
-        <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'checkin.php' ? 'active' : '') ?>">
-            <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
-        </a>
         <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item">
             <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
+        </a>
+        <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item">
+            <i class="fas fa-question-circle"></i> মডেল টেস্ট / MCQ
+        </a>
+        <a href="<?= BASE_URL ?>/modules/timetable/index.php" class="nav-item">
+            <i class="fas fa-calendar-alt"></i> ক্লাস রুটিন
+        </a>
+        <a href="<?= BASE_URL ?>/modules/syllabus/index.php" class="nav-item">
+            <i class="fas fa-list-alt"></i> সিলেবাস
+        </a>
+        <a href="<?= BASE_URL ?>/modules/teacher/diary.php" class="nav-item">
+            <i class="fas fa-book-open"></i> ক্লাস ডাইরি
+        </a>
+        <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item">
+            <i class="fas fa-file-upload"></i> বাল্ক ভর্তি (Excel)
+        </a>
+        <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item">
+            <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
         </a>
 
         <span class="nav-section">আর্থিক</span>
