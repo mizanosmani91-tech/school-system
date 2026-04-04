@@ -4,6 +4,7 @@
 # ================================================================
 
 echo "🚀 School Management System - Starting up..."
+rm -f /var/www/html/index.html
 
 # Wait for MySQL to be ready (Railway MySQL takes a few seconds)
 echo "⏳ Waiting for MySQL connection..."
