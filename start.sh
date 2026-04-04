@@ -85,15 +85,5 @@ echo "✅  Login: admin / password"
 echo "✅ ============================================"
 echo ""
 
-# Configure PORT
-PORT="${PORT:-80}"
-echo "Listen $PORT" > /etc/apache2/ports.conf
-echo "<VirtualHost *:$PORT>
-    DocumentRoot /var/www/html
-    <Directory /var/www/html>
-        AllowOverride All
-    </Directory>
-</VirtualHost>" > /etc/apache2/sites-enabled/000-default.conf
-
 # Start Apache
 exec apache2-foreground
