@@ -1,30 +1,33 @@
-FROM php:8.2-apache
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    zip unzip curl \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install pdo pdo_mysql mysqli gd \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    apache2 \
+    php8.1 \
+    php8.1-mysql \
+    php8.1-gd \
+    php8.1-curl \
+    php8.1-mbstring \
+    libapache2-mod-php8.1 \
+    && apt-get clean
 
-# Fix MPM conflict - disable mpm_event, enable mpm_prefork
-RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
-    && a2enmod mpm_prefork rewrite headers
+RUN a2enmod rewrite php8.1 \
+    && a2dismod mpm_event \
+    && a2enmod mpm_prefork
 
-# Allow .htaccess
-RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
+RUN echo '<Directory /var/www/html>\nAllowOverride All\nRequire all granted\n</Directory>' \
+    >> /etc/apache2/apache2.conf
 
 WORKDIR /var/www/html
+RUN rm -f /var/www/html/index.html
 
 COPY . .
 
-RUN mkdir -p assets/uploads/students \
-    && chmod -R 777 assets/uploads \
-    && chown -R www-data:www-data /var/www/html
+RUN chown -R www-data:www-data /var/www/html \
+    && mkdir -p assets/uploads/students \
+    && chmod -R 777 assets/uploads
 
 EXPOSE 80
 
-CMD ["apache2-foreground"]
+CMD ["apache2ctl", "-D", "FOREGROUND"]
