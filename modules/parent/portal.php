@@ -2,27 +2,41 @@
 require_once '../../includes/functions.php';
 startSession();
 
-// Parent login check
-if (!isset($_SESSION['user_id']) || $_SESSION['role_slug'] !== 'parent') {
+// Parent login check — supports both old (user_id) and new (parent_student_id) session
+if ($_SESSION['role_slug'] !== 'parent') {
     header('Location: ' . BASE_URL . '/login.php');
     exit;
 }
 
 $db = getDB();
-$userId = $_SESSION['user_id'];
 
-// Get user's phone
-$user = $db->prepare("SELECT * FROM users WHERE id=?");
-$user->execute([$userId]);
-$userInfo = $user->fetch();
+// New login: directly know the student from session
+if (!empty($_SESSION['parent_student_id'])) {
+    $stmt = $db->prepare("SELECT s.*, c.class_name_bn, sec.section_name FROM students s
+        LEFT JOIN classes c ON s.class_id=c.id
+        LEFT JOIN sections sec ON s.section_id=sec.id
+        WHERE s.id=? AND s.status='active'");
+    $stmt->execute([$_SESSION['parent_student_id']]);
+    $myStudents = $stmt->fetchAll();
 
-// Find students linked to this parent
-$stmt = $db->prepare("SELECT s.*, c.class_name_bn, sec.section_name FROM students s
-    LEFT JOIN classes c ON s.class_id=c.id
-    LEFT JOIN sections sec ON s.section_id=sec.id
-    WHERE (s.father_phone=? OR s.guardian_phone=?) AND s.status='active'");
-$stmt->execute([$userInfo['phone'], $userInfo['phone']]);
-$myStudents = $stmt->fetchAll();
+// Old login: look up via users table phone (backward compatible)
+} elseif (!empty($_SESSION['user_id'])) {
+    $userId = $_SESSION['user_id'];
+    $user = $db->prepare("SELECT * FROM users WHERE id=?");
+    $user->execute([$userId]);
+    $userInfo = $user->fetch();
+
+    $stmt = $db->prepare("SELECT s.*, c.class_name_bn, sec.section_name FROM students s
+        LEFT JOIN classes c ON s.class_id=c.id
+        LEFT JOIN sections sec ON s.section_id=sec.id
+        WHERE (s.father_phone=? OR s.guardian_phone=?) AND s.status='active'");
+    $stmt->execute([$userInfo['phone'], $userInfo['phone']]);
+    $myStudents = $stmt->fetchAll();
+
+} else {
+    header('Location: ' . BASE_URL . '/login.php');
+    exit;
+}
 
 $activeStudentId = (int)($_GET['student_id'] ?? ($myStudents[0]['id'] ?? 0));
 $activeStudent = null;
