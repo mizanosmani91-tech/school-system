@@ -13,7 +13,7 @@ $isAdmin = in_array($currentRole, ['super_admin','principal']);
 
 if ($isAdmin && isset($_GET['id'])) {
     $teacherDbId = (int)$_GET['id'];
-    $stmt = $db->prepare("SELECT t.*, u.username, u.last_login FROM teachers t JOIN users u ON t.user_id=u.id WHERE t.id=? AND t.is_active=1");
+    $stmt = $db->prepare("SELECT t.*, u.username, u.last_login FROM teachers t JOIN users u ON t.user_id=u.id WHERE t.id=?");
     $stmt->execute([$teacherDbId]);
 } else {
     $stmt = $db->prepare("SELECT t.*, u.username, u.last_login FROM teachers t JOIN users u ON t.user_id=u.id WHERE t.user_id=?");
