@@ -5,6 +5,7 @@ $pageTitle = 'শিক্ষক তালিকা';
 $db = getDB();
 
 // Add teacher
+$newTeacherInfo = null; // copy-box এর জন্য
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_teacher'])) {
     if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
     $name = trim($_POST['name']??''); $nameBn = trim($_POST['name_bn']??'');
@@ -14,7 +15,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_teacher'])) {
     $qualification = trim($_POST['qualification']??'');
 
     if ($name && $phone) {
-        // Random 8 character পাসওয়ার্ড তৈরি
         $rawPassword = substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'), 0, 8);
         $hashedPw = password_hash($rawPassword, PASSWORD_DEFAULT);
         $uStmt = $db->prepare("INSERT INTO users (name,name_bn,username,phone,password,role_id) VALUES (?,?,?,?,?,3)");
@@ -23,8 +23,17 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_teacher'])) {
         $teacherId = 'TCH-'.date('Y').'-'.str_pad($db->query("SELECT COUNT(*)+1 FROM teachers")->fetchColumn(),3,'0',STR_PAD_LEFT);
         $tStmt = $db->prepare("INSERT INTO teachers (user_id,teacher_id_no,name,name_bn,phone,designation_bn,joining_date,salary,qualification,is_active) VALUES (?,?,?,?,?,?,?,?,?,1)");
         $tStmt->execute([$userId,$teacherId,$name,$nameBn,$phone,$designation,$joining,$salary,$qualification]);
-        setFlash('success',"শিক্ষক যোগ হয়েছে! ID: $teacherId | লগইন: $phone | পাসওয়ার্ড: $rawPassword (সংরক্ষণ করুন!)");
-    } else { setFlash('danger','নাম ও ফোন আবশ্যক।'); }
+
+        // Flash এর বদলে session এ রাখি — copy-box modal দেখাবে
+        $_SESSION['new_teacher_info'] = [
+            'name' => $nameBn ?: $name,
+            'id'   => $teacherId,
+            'phone'=> $phone,
+            'pass' => $rawPassword,
+        ];
+    } else {
+        setFlash('danger','নাম ও ফোন আবশ্যক।');
+    }
     header('Location: list.php'); exit;
 }
 
@@ -35,6 +44,12 @@ if (isset($_GET['delete'])) {
     header('Location: list.php'); exit;
 }
 
+// নতুন শিক্ষকের তথ্য session থেকে নাও
+if (!empty($_SESSION['new_teacher_info'])) {
+    $newTeacherInfo = $_SESSION['new_teacher_info'];
+    unset($_SESSION['new_teacher_info']);
+}
+
 $search = trim($_GET['search']??'');
 $where = "is_active=1"; $params=[];
 if ($search) { $where.=" AND (name LIKE ? OR name_bn LIKE ? OR phone LIKE ?)"; $s="%$search%"; $params=[$s,$s,$s]; }
@@ -43,6 +58,55 @@ $stmt->execute($params); $teachers = $stmt->fetchAll();
 
 require_once '../../includes/header.php';
 ?>
+
+<!-- ✅ নতুন শিক্ষক যোগ হলে Copy-Box Modal -->
+<?php if ($newTeacherInfo): ?>
+<div class="modal-overlay" id="teacherInfoModal" style="display:flex;">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-header" style="background:var(--success);color:#fff;border-radius:10px 10px 0 0;">
+            <span style="font-weight:700;font-size:16px;"><i class="fas fa-check-circle"></i> শিক্ষক সফলভাবে যোগ হয়েছে!</span>
+        </div>
+        <div class="card-body" style="padding:24px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">নিচের তথ্যগুলো শিক্ষককে জানিয়ে দিন। এই উইন্ডো বন্ধ করলে আর দেখা যাবে না।</p>
+
+            <div style="background:var(--bg);border:2px dashed var(--border);border-radius:10px;padding:16px;font-family:monospace;font-size:14px;line-height:2;" id="teacherInfoText">
+                <div><span style="color:var(--text-muted);">নাম:</span> <strong><?= e($newTeacherInfo['name']) ?></strong></div>
+                <div><span style="color:var(--text-muted);">শিক্ষক ID:</span> <strong style="color:var(--primary);"><?= e($newTeacherInfo['id']) ?></strong></div>
+                <div><span style="color:var(--text-muted);">লগইন নম্বর:</span> <strong><?= e($newTeacherInfo['phone']) ?></strong></div>
+                <div><span style="color:var(--text-muted);">পাসওয়ার্ড:</span> <strong style="color:var(--danger);font-size:16px;letter-spacing:1px;"><?= e($newTeacherInfo['pass']) ?></strong></div>
+            </div>
+
+            <div style="display:flex;gap:10px;margin-top:16px;">
+                <button onclick="copyTeacherInfo()" class="btn btn-primary" style="flex:1;" id="copyBtn">
+                    <i class="fas fa-copy"></i> তথ্য কপি করুন
+                </button>
+                <button onclick="document.getElementById('teacherInfoModal').style.display='none'" class="btn btn-outline" style="flex:1;">
+                    <i class="fas fa-times"></i> বন্ধ করুন
+                </button>
+            </div>
+
+            <div class="alert alert-warning mt-16" style="font-size:12px;">
+                <i class="fas fa-exclamation-triangle"></i> পাসওয়ার্ডটি এখনই সংরক্ষণ করুন। পরে আর দেখা যাবে না।
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function copyTeacherInfo() {
+    const text = `নাম: <?= e($newTeacherInfo['name']) ?>\nশিক্ষক ID: <?= e($newTeacherInfo['id']) ?>\nলগইন নম্বর: <?= e($newTeacherInfo['phone']) ?>\nপাসওয়ার্ড: <?= e($newTeacherInfo['pass']) ?>`;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.innerHTML = '<i class="fas fa-check"></i> কপি হয়েছে!';
+        btn.style.background = 'var(--success)';
+        setTimeout(() => {
+            btn.innerHTML = '<i class="fas fa-copy"></i> তথ্য কপি করুন';
+            btn.style.background = '';
+        }, 2500);
+    });
+}
+</script>
+<?php endif; ?>
+
 <div class="section-header">
     <h2 class="section-title"><i class="fas fa-chalkboard-teacher"></i> শিক্ষক তালিকা</h2>
     <button onclick="openModal('addTeacherModal')" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> নতুন শিক্ষক</button>
@@ -76,7 +140,10 @@ require_once '../../includes/header.php';
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div class="avatar"><?=mb_substr($t['name_bn']??$t['name'],0,1)?></div>
                             <div>
-                                <div style="font-weight:700;font-size:14px;"><?=e($t['name_bn']??$t['name'])?></div>
+                                <!-- ✅ নামে ক্লিক করলে প্রোফাইলে যাবে -->
+                                <a href="profile.php?id=<?=$t['id']?>" style="font-weight:700;font-size:14px;color:var(--primary);text-decoration:none;" title="প্রোফাইল দেখুন">
+                                    <?=e($t['name_bn']??$t['name'])?>
+                                </a>
                                 <div style="font-size:11px;color:var(--text-muted);">ID: <?=e($t['teacher_id_no'])?></div>
                             </div>
                         </div>
@@ -85,8 +152,9 @@ require_once '../../includes/header.php';
                     <td style="font-size:13px;"><?=e($t['phone']??'-')?></td>
                     <td style="font-size:13px;"><?=banglaDate($t['joining_date']??'')?></td>
                     <td style="font-weight:700;color:var(--success);">৳<?=number_format($t['salary']??0)?></td>
-                    <td class="no-print">
-                        <a href="?delete=<?=$t['id']?>" onclick="return confirm('নিষ্ক্রিয় করবেন?')" class="btn btn-danger btn-xs"><i class="fas fa-ban"></i></a>
+                    <td class="no-print" style="display:flex;gap:6px;align-items:center;">
+                        <a href="profile.php?id=<?=$t['id']?>" class="btn btn-primary btn-xs" title="প্রোফাইল"><i class="fas fa-eye"></i></a>
+                        <a href="?delete=<?=$t['id']?>" onclick="return confirm('নিষ্ক্রিয় করবেন?')" class="btn btn-danger btn-xs" title="নিষ্ক্রিয়"><i class="fas fa-ban"></i></a>
                     </td>
                 </tr>
                 <?php endforeach; endif; ?>
@@ -122,7 +190,6 @@ require_once '../../includes/header.php';
                     <div class="form-group" style="grid-column:1/-1;"><label>শিক্ষাগত যোগ্যতা</label>
                         <input type="text" name="qualification" class="form-control" placeholder="কামিল, বি.এড."></div>
                 </div>
-                <div class="alert alert-info mt-16"><i class="fas fa-info-circle"></i> ফোন নম্বর দিয়ে লগইন করতে পারবেন। প্রাথমিক পাসওয়ার্ড হবে ফোন নম্বর।</div>
             </div>
             <div class="modal-footer">
                 <button type="button" onclick="closeModal('addTeacherModal')" class="btn btn-outline">বাতিল</button>
