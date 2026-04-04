@@ -7,7 +7,7 @@ if (!function_exists('str_contains')) {
 }
 
 require_once '../../includes/functions.php';
-requireLogin(['super_admin','principal','teacher','accountant']);
+requireLogin(['teacher','accountant']);
 $pageTitle = 'চেক ইন / চেক আউট';
 $db = getDB();
 
