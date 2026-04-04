@@ -62,6 +62,53 @@ if (isset($_GET['delete']) && in_array($_SESSION['role_slug'],['super_admin','pr
     header('Location: diary.php'); exit;
 }
 
+// Save student evaluations
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_evaluation'])) {
+    if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
+    $diaryId   = (int)$_POST['diary_id'];
+    $classId   = (int)$_POST['eval_class_id'];
+    $subjectId = (int)($_POST['eval_subject_id']??0) ?: null;
+    $evalDate  = $_POST['eval_date'] ?? date('Y-m-d');
+    $teacherId = $teacher['id'] ?? null;
+    $evals     = $_POST['evals'] ?? [];
+    $inattentive = $_POST['inattentive'] ?? [];
+    $notes     = $_POST['notes'] ?? [];
+
+    foreach ($evals as $studentId => $data) {
+        $studentId     = (int)$studentId;
+        $lessonStatus  = $data['lesson'] ?? 'learned';
+        $hwStatus      = $data['homework'] ?? 'na';
+        $isInattentive = isset($inattentive[$studentId]) ? 1 : 0;
+        $note          = trim($notes[$studentId] ?? '');
+
+        $db->prepare("INSERT INTO student_evaluations
+            (diary_id, student_id, teacher_id, class_id, subject_id, eval_date, lesson_status, homework_status, is_inattentive, note)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE lesson_status=VALUES(lesson_status), homework_status=VALUES(homework_status),
+            is_inattentive=VALUES(is_inattentive), note=VALUES(note)")
+           ->execute([$diaryId, $studentId, $teacherId, $classId, $subjectId, $evalDate, $lessonStatus, $hwStatus, $isInattentive, $note]);
+
+        // Parent notification if inattentive
+        if ($isInattentive) {
+            $stInfo = $db->prepare("SELECT name_bn, name FROM students WHERE id=?");
+            $stInfo->execute([$studentId]);
+            $st = $stInfo->fetch();
+            $subName = $subjectId ? $db->query("SELECT subject_name_bn FROM subjects WHERE id=$subjectId")->fetchColumn() : 'অজানা বিষয়';
+            $tName   = $teacherId ? $db->query("SELECT name_bn FROM teachers WHERE id=$teacherId")->fetchColumn() : 'শিক্ষক';
+            $msg = ($st['name_bn']??$st['name']) . " ($evalDate) তারিখে \"$subName\" বিষয়ে অমনোযোগী ছিল। দয়া করে $tName শিক্ষকের সাথে যোগাযোগ করুন।";
+
+            $alreadyNotified = $db->prepare("SELECT id FROM parent_notifications WHERE student_id=? AND subject_id=? AND DATE(created_at)=?");
+            $alreadyNotified->execute([$studentId, $subjectId, $evalDate]);
+            if (!$alreadyNotified->fetch()) {
+                $db->prepare("INSERT INTO parent_notifications (student_id, teacher_id, subject_id, type, message) VALUES (?,?,?,'inattentive',?)")
+                   ->execute([$studentId, $teacherId, $subjectId, $msg]);
+            }
+        }
+    }
+    setFlash('success','মূল্যায়ন সফলভাবে সংরক্ষিত হয়েছে।');
+    header('Location: diary.php'); exit;
+}
+
 // Filter
 $filterClass   = (int)($_GET['class_id']??0);
 $filterDate    = $_GET['date']??'';
@@ -172,6 +219,7 @@ require_once ($_SESSION['role_slug']==='teacher') ? '../../includes/teacher_head
                     </td>
                     <td class="no-print">
                         <button onclick="viewDiary(<?=json_encode($d)?>)" class="btn btn-info btn-xs"><i class="fas fa-eye"></i></button>
+                        <button onclick="openEvalModal(<?=$d['id']?>,<?=$d['class_id']?>,<?=$d['subject_id']??0?>,'<?=e($d['diary_date'])?>','<?=e($d['subject_name_bn']??'')?>','<?=e($d['class_name_bn']??'')?>')" class="btn btn-warning btn-xs" title="ছাত্র মূল্যায়ন"><i class="fas fa-clipboard-check"></i></button>
                         <?php if(in_array($_SESSION['role_slug'],['super_admin','principal'])): ?>
                         <a href="?delete=<?=$d['id']?>" onclick="return confirm('মুছবেন?')" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i></a>
                         <?php endif; ?>
@@ -269,6 +317,56 @@ require_once ($_SESSION['role_slug']==='teacher') ? '../../includes/teacher_head
     </div>
 </div>
 
+<!-- Evaluation Modal -->
+<div class="modal-overlay" id="evalModal">
+    <div class="modal-box" style="max-width:800px;max-height:90vh;overflow-y:auto;">
+        <div class="modal-header">
+            <span style="font-weight:700;"><i class="fas fa-clipboard-check"></i> ছাত্র মূল্যায়ন — <span id="evalTitle"></span></span>
+            <button onclick="closeModal('evalModal')" class="btn btn-outline btn-xs">✕</button>
+        </div>
+        <form method="POST" id="evalForm">
+            <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
+            <input type="hidden" name="save_evaluation" value="1">
+            <input type="hidden" name="diary_id" id="evalDiaryId">
+            <input type="hidden" name="eval_class_id" id="evalClassId">
+            <input type="hidden" name="eval_subject_id" id="evalSubjectId">
+            <input type="hidden" name="eval_date" id="evalDate">
+            <div class="modal-body">
+                <div id="evalStudentList">
+                    <div style="text-align:center;padding:20px;color:#718096;"><i class="fas fa-spinner fa-spin"></i> ছাত্র তালিকা লোড হচ্ছে...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('evalModal')" class="btn btn-outline">বাতিল</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> মূল্যায়ন সংরক্ষণ</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.eval-table { width:100%; border-collapse:collapse; font-size:13px; }
+.eval-table th { background:#1a5276; color:#fff; padding:9px 10px; text-align:center; font-size:12px; }
+.eval-table td { padding:8px 10px; border-bottom:1px solid #e2e8f0; vertical-align:middle; }
+.eval-table tr:hover { background:#f7fafc; }
+.eval-radio { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+.eval-radio label {
+    display:flex; align-items:center; gap:4px; padding:4px 8px;
+    border:1.5px solid #e2e8f0; border-radius:20px; cursor:pointer;
+    font-size:11px; font-weight:600; transition:.15s; white-space:nowrap;
+}
+.eval-radio label:hover { border-color:#1a5276; }
+.eval-radio input[type=radio] { display:none; }
+.eval-radio input[type=radio]:checked + span { font-weight:700; }
+.label-learned   { border-color:#27ae60!important; color:#27ae60; }
+.label-partial   { border-color:#f39c12!important; color:#f39c12; }
+.label-not       { border-color:#e74c3c!important; color:#e74c3c; }
+.label-hw-done   { border-color:#2980b9!important; color:#2980b9; }
+.label-hw-not    { border-color:#e74c3c!important; color:#e74c3c; }
+.label-hw-na     { border-color:#95a5a6!important; color:#95a5a6; }
+.inattentive-cb  { width:18px; height:18px; cursor:pointer; accent-color:#e74c3c; }
+</style>
+
 <script>
 function viewDiary(d) {
     document.getElementById('viewTitle').textContent = d.topic_bn || d.topic || 'ডাইরি বিস্তারিত';
@@ -285,6 +383,105 @@ function viewDiary(d) {
             <div style="font-size:12px;color:#718096;">শিক্ষক: ${d.teacher_name||'অজানা'}</div>
         </div>`;
     openModal('viewDiaryModal');
+}
+
+function openEvalModal(diaryId, classId, subjectId, date, subjectName, className) {
+    document.getElementById('evalDiaryId').value    = diaryId;
+    document.getElementById('evalClassId').value    = classId;
+    document.getElementById('evalSubjectId').value  = subjectId;
+    document.getElementById('evalDate').value       = date;
+    document.getElementById('evalTitle').textContent = className + (subjectName ? ' — ' + subjectName : '') + ' (' + date + ')';
+
+    // Load students via AJAX
+    const listDiv = document.getElementById('evalStudentList');
+    listDiv.innerHTML = '<div style="text-align:center;padding:20px;"><i class="fas fa-spinner fa-spin"></i> লোড হচ্ছে...</div>';
+    openModal('evalModal');
+
+    fetch(`<?= BASE_URL ?>/api/students_by_class.php?class_id=${classId}&diary_id=${diaryId}`)
+        .then(r => r.json())
+        .then(students => {
+            if (!students.length) {
+                listDiv.innerHTML = '<div style="text-align:center;padding:20px;color:#718096;">এই শ্রেণীতে কোনো ছাত্র নেই</div>';
+                return;
+            }
+            let html = `<table class="eval-table">
+                <thead><tr>
+                    <th style="text-align:left;width:30px;">#</th>
+                    <th style="text-align:left;">ছাত্রের নাম</th>
+                    <th>পড়া শিখেছে?</th>
+                    <th>বাড়ির কাজ?</th>
+                    <th>অমনোযোগী?</th>
+                    <th>মন্তব্য</th>
+                </tr></thead><tbody>`;
+
+            students.forEach((s, i) => {
+                const ls = s.lesson_status || 'learned';
+                const hs = s.homework_status || 'na';
+                const ia = s.is_inattentive == 1;
+                const nt = s.note || '';
+                html += `<tr>
+                    <td style="color:#718096;">${i+1}</td>
+                    <td>
+                        <div style="font-weight:600;">${s.name_bn||s.name}</div>
+                        <div style="font-size:11px;color:#718096;">রোল: ${s.roll_number||''}</div>
+                    </td>
+                    <td>
+                        <div class="eval-radio">
+                            <label class="${ls==='learned'?'label-learned':''}">
+                                <input type="radio" name="evals[${s.id}][lesson]" value="learned" ${ls==='learned'?'checked':''}>
+                                <span>✅ শিখেছে</span>
+                            </label>
+                            <label class="${ls==='partial'?'label-partial':''}">
+                                <input type="radio" name="evals[${s.id}][lesson]" value="partial" ${ls==='partial'?'checked':''}>
+                                <span>🟡 আংশিক</span>
+                            </label>
+                            <label class="${ls==='not_learned'?'label-not':''}">
+                                <input type="radio" name="evals[${s.id}][lesson]" value="not_learned" ${ls==='not_learned'?'checked':''}>
+                                <span>❌ শিখেনি</span>
+                            </label>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="eval-radio">
+                            <label class="${hs==='done'?'label-hw-done':''}">
+                                <input type="radio" name="evals[${s.id}][homework]" value="done" ${hs==='done'?'checked':''}>
+                                <span>✅ করেছে</span>
+                            </label>
+                            <label class="${hs==='not_done'?'label-hw-not':''}">
+                                <input type="radio" name="evals[${s.id}][homework]" value="not_done" ${hs==='not_done'?'checked':''}>
+                                <span>❌ করেনি</span>
+                            </label>
+                            <label class="${hs==='na'?'label-hw-na':''}">
+                                <input type="radio" name="evals[${s.id}][homework]" value="na" ${hs==='na'?'checked':''}>
+                                <span>প্রযোজ্য নয়</span>
+                            </label>
+                        </div>
+                    </td>
+                    <td style="text-align:center;">
+                        <input type="checkbox" class="inattentive-cb" name="inattentive[${s.id}]" value="1" ${ia?'checked':''} title="অমনোযোগী হলে টিক দিন — অভিভাবককে notify করবে">
+                    </td>
+                    <td>
+                        <input type="text" name="notes[${s.id}]" class="form-control" style="padding:5px 8px;font-size:12px;" placeholder="মন্তব্য..." value="${nt}">
+                    </td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            listDiv.innerHTML = html;
+
+            // Radio label highlight on change
+            listDiv.querySelectorAll('.eval-radio input[type=radio]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    this.closest('.eval-radio').querySelectorAll('label').forEach(l => {
+                        l.className = l.className.replace(/label-\S+/g,'').trim();
+                    });
+                    const map = {learned:'label-learned',partial:'label-partial',not_learned:'label-not',done:'label-hw-done',not_done:'label-hw-not',na:'label-hw-na'};
+                    if (map[this.value]) this.parentElement.classList.add(map[this.value]);
+                });
+            });
+        })
+        .catch(() => {
+            listDiv.innerHTML = '<div style="text-align:center;padding:20px;color:#e74c3c;">ছাত্র তালিকা লোড করতে সমস্যা হয়েছে।</div>';
+        });
 }
 </script>
 
