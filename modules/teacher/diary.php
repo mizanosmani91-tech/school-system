@@ -20,7 +20,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_diary (
     teacher_id INT,
     class_id INT NOT NULL,
     subject_id INT,
-    date DATE NOT NULL,
+    diary_date DATE NOT NULL,
     topic VARCHAR(255),
     topic_bn VARCHAR(255),
     description TEXT,
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_diary'])) {
     if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
     $classId   = (int)$_POST['class_id'];
     $subjectId = (int)($_POST['subject_id']??0) ?: null;
-    $date      = $_POST['date'] ?? date('Y-m-d');
+    $date      = $_POST['diary_date'] ?? date('Y-m-d');
     $topic     = trim($_POST['topic']??'');
     $topicBn   = trim($_POST['topic_bn']??'');
     $desc      = trim($_POST['description']??'');
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_diary'])) {
     $teacherId = $teacher['id'] ?? null; // admin হলে null থাকবে
 
     $stmt = $db->prepare("INSERT INTO class_diary
-        (teacher_id,class_id,subject_id,date,topic,topic_bn,description,homework,next_topic,lesson_status,created_by)
+        (teacher_id,class_id,subject_id,diary_date,topic,topic_bn,description,homework,next_topic,lesson_status,created_by)
         VALUES (?,?,?,?,?,?,?,?,?,?,?)");
     $stmt->execute([$teacherId,$classId,$subjectId,$date,$topic,$topicBn,$desc,$homework,$nextTopic,$status,$userId]);
     setFlash('success','ডাইরি সফলভাবে সংরক্ষিত হয়েছে।');
@@ -72,7 +72,7 @@ $offset = ($page-1)*$perPage;
 
 $where = ['1=1']; $params = [];
 if ($filterClass)   { $where[] = 'cd.class_id=?';   $params[] = $filterClass; }
-if ($filterDate)    { $where[] = 'cd.date=?';        $params[] = $filterDate; }
+if ($filterDate)    { $where[] = 'cd.diary_date=?';        $params[] = $filterDate; }
 if ($filterTeacher) { $where[] = 'cd.teacher_id=?';  $params[] = $filterTeacher; }
 // Teachers see only their own
 if ($_SESSION['role_slug']==='teacher' && $teacher) {
@@ -88,7 +88,7 @@ $stmt = $db->prepare("SELECT cd.*, c.class_name_bn, s.subject_name_bn, t.name_bn
     LEFT JOIN classes c ON cd.class_id=c.id
     LEFT JOIN subjects s ON cd.subject_id=s.id
     LEFT JOIN teachers t ON cd.teacher_id=t.id
-    WHERE $whereStr ORDER BY cd.`date` DESC, cd.created_at DESC
+    WHERE $whereStr ORDER BY cd.diary_date DESC, cd.created_at DESC
     LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $diaries = $stmt->fetchAll();
@@ -200,7 +200,7 @@ require_once ($_SESSION['role_slug']==='teacher') ? '../../includes/teacher_head
                 <div class="form-grid">
                     <div class="form-group">
                         <label>তারিখ <span style="color:red;">*</span></label>
-                        <input type="date" name="date" class="form-control" value="<?=date('Y-m-d')?>" required>
+                        <input type="date" name="diary_date" class="form-control" value="<?=date('Y-m-d')?>" required>
                     </div>
                     <div class="form-group">
                         <label>শ্রেণী <span style="color:red;">*</span></label>
@@ -277,7 +277,7 @@ function viewDiary(d) {
             <div style="display:flex;gap:12px;flex-wrap:wrap;">
                 <span class="badge badge-primary">${d.class_name_bn||''}</span>
                 <span class="badge badge-info">${d.subject_name_bn||''}</span>
-                <span class="badge badge-secondary">${d.date||''}</span>
+                <span class="badge badge-secondary">${d.diary_date||''}</span>
             </div>
             ${d.description ? `<div><strong>বিবরণ:</strong><p style="margin-top:6px;font-size:14px;line-height:1.6;">${d.description}</p></div>` : ''}
             ${d.homework ? `<div style="background:#fff3cd;border-radius:8px;padding:12px;"><strong>🏠 বাড়ির কাজ:</strong><p style="margin-top:6px;font-size:14px;">${d.homework}</p></div>` : ''}
