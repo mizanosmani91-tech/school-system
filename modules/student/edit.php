@@ -18,12 +18,34 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
     $fields = ['name_bn','name','date_of_birth','gender','religion','blood_group','class_id','section_id',
                'father_name','father_phone','mother_name','guardian_phone','address_present',
-               'status','hifz_para_complete','notes'];
+               'status','hifz_para_complete','notes',
+               'monthly_fee','is_hostel','hostel_fee','is_hostel_food','food_fee'];
     $sets=[]; $vals=[];
     foreach ($fields as $f) {
         $sets[] = "$f=?";
         $vals[] = trim($_POST[$f]??'') ?: null;
     }
+
+    // হোস্টেল চেকবক্স — না থাকলে 0
+    $isHostel     = isset($_POST['is_hostel']) ? 1 : 0;
+    $isHostelFood = ($isHostel && isset($_POST['is_hostel_food'])) ? 1 : 0;
+    $hostelFee    = $isHostel ? (float)($_POST['hostel_fee'] ?? 0) : 0;
+    $foodFee      = $isHostelFood ? (float)($_POST['food_fee'] ?? 0) : 0;
+
+    $sets=[]; $vals=[];
+    $simpleFields = ['name_bn','name','date_of_birth','gender','religion','blood_group','class_id','section_id',
+                     'father_name','father_phone','mother_name','guardian_phone','address_present',
+                     'status','hifz_para_complete','notes'];
+    foreach ($simpleFields as $f) {
+        $sets[] = "$f=?";
+        $vals[] = trim($_POST[$f]??'') ?: null;
+    }
+    // ফি ফিল্ড আলাদাভাবে
+    $sets[] = 'monthly_fee=?';    $vals[] = (float)($_POST['monthly_fee'] ?? 0);
+    $sets[] = 'is_hostel=?';      $vals[] = $isHostel;
+    $sets[] = 'hostel_fee=?';     $vals[] = $hostelFee;
+    $sets[] = 'is_hostel_food=?'; $vals[] = $isHostelFood;
+    $sets[] = 'food_fee=?';       $vals[] = $foodFee;
     $vals[] = $id;
     $db->prepare("UPDATE students SET ".implode(',',$sets)." WHERE id=?")->execute($vals);
     setFlash('success','তথ্য আপডেট হয়েছে।');
@@ -112,12 +134,99 @@ require_once '../../includes/header.php';
         <textarea name="notes" class="form-control" rows="3"><?=e($student['notes']??'')?></textarea>
     </div>
 </div>
+<div class="card mb-16">
+    <div class="card-header" style="background:#f4ecf7;">
+        <span class="card-title" style="color:#7d3c98;"><i class="fas fa-money-bill-wave"></i> ফি তথ্য</span>
+    </div>
+    <div class="card-body">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>মাসিক বেতন (টাকা)</label>
+                <input type="number" name="monthly_fee" class="form-control" min="0" step="0.01"
+                    value="<?=e($student['monthly_fee'] ?? 0)?>">
+            </div>
+        </div>
+
+        <!-- হোস্টেল -->
+        <div style="margin-top:16px;">
+            <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
+                <input type="checkbox" name="is_hostel" id="isHostelCheck" onchange="toggleHostel(this)"
+                    style="width:18px;height:18px;" <?=!empty($student['is_hostel'])&&$student['is_hostel']?'checked':''?>>
+                হোস্টেলে থাকে
+            </label>
+        </div>
+
+        <div id="hostelFields" style="display:<?=!empty($student['is_hostel'])&&$student['is_hostel']?'block':'none'?>;margin-top:16px;padding:16px;background:#faf4ff;border-radius:10px;border:1px dashed #c39bd3;">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>হোস্টেল ফি (টাকা/মাস)</label>
+                    <input type="number" name="hostel_fee" id="hostelFee" class="form-control" min="0" step="0.01"
+                        value="<?=e($student['hostel_fee'] ?? 0)?>">
+                </div>
+            </div>
+            <div style="margin-top:12px;">
+                <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
+                    <input type="checkbox" name="is_hostel_food" id="isHostelFoodCheck" onchange="toggleFood(this)"
+                        style="width:18px;height:18px;" <?=!empty($student['is_hostel_food'])&&$student['is_hostel_food']?'checked':''?>>
+                    হোস্টেলের খাবার খায়
+                </label>
+            </div>
+            <div id="foodFields" style="display:<?=!empty($student['is_hostel_food'])&&$student['is_hostel_food']?'block':'none'?>;margin-top:12px;">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>খাবার ফি (টাকা/মাস)</label>
+                        <input type="number" name="food_fee" id="foodFee" class="form-control" min="0" step="0.01"
+                            value="<?=e($student['food_fee'] ?? 0)?>">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- মোট -->
+        <div id="totalBox" style="margin-top:16px;padding:12px 16px;background:#eafaf1;border-radius:8px;border-left:4px solid var(--success);">
+            <strong>মোট মাসিক খরচ:</strong>
+            <span id="totalAmount" style="font-size:18px;font-weight:700;color:var(--success);margin-left:8px;">৳ 0</span>
+        </div>
+    </div>
+</div>
+
 <div style="display:flex;gap:10px;">
     <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> আপডেট করুন</button>
     <a href="view.php?id=<?=$id?>" class="btn btn-outline">বাতিল</a>
 </div>
 </form>
 <script>
+function toggleHostel(cb) {
+    document.getElementById('hostelFields').style.display = cb.checked ? 'block' : 'none';
+    if (!cb.checked) {
+        document.getElementById('isHostelFoodCheck').checked = false;
+        document.getElementById('foodFields').style.display = 'none';
+        document.getElementById('hostelFee').value = 0;
+        document.getElementById('foodFee').value = 0;
+    }
+    calcTotal();
+}
+
+function toggleFood(cb) {
+    document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
+    if (!cb.checked) document.getElementById('foodFee').value = 0;
+    calcTotal();
+}
+
+function calcTotal() {
+    const monthly = parseFloat(document.querySelector('[name=monthly_fee]').value) || 0;
+    const hostel  = parseFloat(document.getElementById('hostelFee').value) || 0;
+    const food    = parseFloat(document.getElementById('foodFee').value) || 0;
+    document.getElementById('totalAmount').textContent = '৳ ' + (monthly + hostel + food).toLocaleString();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    calcTotal();
+    document.querySelectorAll('[name=monthly_fee],[name=hostel_fee],[name=food_fee]').forEach(el => {
+        el.addEventListener('input', calcTotal);
+    });
+});
+
 function loadSections(classId) {
     fetch('<?=BASE_URL?>/api/sections.php?class_id='+classId)
     .then(r=>r.json()).then(data=>{
