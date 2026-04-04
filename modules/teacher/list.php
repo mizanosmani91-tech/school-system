@@ -14,15 +14,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_teacher'])) {
     $qualification = trim($_POST['qualification']??'');
 
     if ($name && $phone) {
-        // Create user account
-        $hashedPw = password_hash($phone, PASSWORD_DEFAULT);
+        // Random 8 character পাসওয়ার্ড তৈরি
+        $rawPassword = substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'), 0, 8);
+        $hashedPw = password_hash($rawPassword, PASSWORD_DEFAULT);
         $uStmt = $db->prepare("INSERT INTO users (name,name_bn,username,phone,password,role_id) VALUES (?,?,?,?,?,3)");
         $uStmt->execute([$name,$nameBn,$phone,$phone,$hashedPw]);
         $userId = $db->lastInsertId();
         $teacherId = 'TCH-'.date('Y').'-'.str_pad($db->query("SELECT COUNT(*)+1 FROM teachers")->fetchColumn(),3,'0',STR_PAD_LEFT);
         $tStmt = $db->prepare("INSERT INTO teachers (user_id,teacher_id_no,name,name_bn,phone,designation_bn,joining_date,salary,qualification,is_active) VALUES (?,?,?,?,?,?,?,?,?,1)");
         $tStmt->execute([$userId,$teacherId,$name,$nameBn,$phone,$designation,$joining,$salary,$qualification]);
-        setFlash('success',"শিক্ষক যোগ হয়েছে! ID: $teacherId, লগইন: $phone");
+        setFlash('success',"শিক্ষক যোগ হয়েছে! ID: $teacherId | লগইন: $phone | পাসওয়ার্ড: $rawPassword (সংরক্ষণ করুন!)");
     } else { setFlash('danger','নাম ও ফোন আবশ্যক।'); }
     header('Location: list.php'); exit;
 }
