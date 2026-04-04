@@ -1,4 +1,11 @@
 <?php
+// PHP 7.x compatibility polyfill
+if (!function_exists('str_contains')) {
+    function str_contains(string $haystack, string $needle): bool {
+        return $needle === '' || strpos($haystack, $needle) !== false;
+    }
+}
+
 require_once '../../includes/functions.php';
 requireLogin(['super_admin','principal','teacher','accountant']);
 $pageTitle = 'চেক ইন / চেক আউট';
