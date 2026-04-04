@@ -69,8 +69,13 @@ if ($activeStudentId) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
     $msg = trim($_POST['message'] ?? '');
     if ($msg && $activeStudentId) {
+        // Get parent phone — from userInfo (old login) or from student record (new login)
+        $parentPhone = $userInfo['phone'] ?? '';
+        if (!$parentPhone && $activeStudent) {
+            $parentPhone = $activeStudent['father_phone'] ?? $activeStudent['guardian_phone'] ?? '';
+        }
         $stmt = $db->prepare("INSERT INTO parent_messages (student_id, parent_phone, message) VALUES (?,?,?)");
-        $stmt->execute([$activeStudentId, $userInfo['phone'], $msg]);
+        $stmt->execute([$activeStudentId, $parentPhone, $msg]);
         setFlash('success', 'আপনার বার্তা পাঠানো হয়েছে।');
     }
     header("Location: portal.php?student_id=$activeStudentId&tab=messages");
@@ -212,7 +217,7 @@ tbody tr:hover { background: #f7fafc; }
         <strong><?= e(getSetting('institute_name')) ?></strong>
     </div>
     <div class="portal-header-right">
-        <span><?= e($userInfo['name'] ?? '') ?></span>
+        <span><?= e($userInfo['name'] ?? $_SESSION['user_name'] ?? $activeStudent['guardian_name'] ?? '') ?></span>
         <a href="<?= BASE_URL ?>/logout.php" style="color:#a8c0d4;text-decoration:none;"><i class="fas fa-sign-out-alt"></i></a>
     </div>
 </header>
