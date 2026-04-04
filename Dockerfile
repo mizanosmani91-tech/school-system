@@ -1,43 +1,30 @@
 FROM php:8.2-apache
 
-# Install required PHP extensions
 RUN apt-get update && apt-get install -y \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
-    zip \
-    unzip \
-    curl \
+    zip unzip curl \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install pdo pdo_mysql mysqli gd \
-    && apt-get clean
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Fix MPM conflict - disable mpm_event, enable mpm_prefork
+RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork rewrite headers
 
-# Set working directory
+# Allow .htaccess
+RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
+
 WORKDIR /var/www/html
 
-# Copy all project files
 COPY . .
 
-# Create uploads directory and set permissions
 RUN mkdir -p assets/uploads/students \
-    && chmod -R 755 assets/uploads \
+    && chmod -R 777 assets/uploads \
     && chown -R www-data:www-data /var/www/html
 
-# Apache config - allow .htaccess
-RUN echo '<Directory /var/www/html>\n\
-    Options Indexes FollowSymLinks\n\
-    AllowOverride All\n\
-    Require all granted\n\
-</Directory>' > /etc/apache2/conf-available/school.conf \
-    && a2enconf school
-
-# Expose port
 EXPOSE 80
 
-# Copy and make start script executable
-RUN chmod +x /var/www/html/start.sh
-
-CMD ["/bin/bash", "/var/www/html/start.sh"]
+CMD ["apache2-foreground"]
