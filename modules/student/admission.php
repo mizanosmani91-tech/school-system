@@ -22,20 +22,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gender = $_POST['gender'] ?? 'male';
     $admDate = $_POST['admission_date'] ?? date('Y-m-d');
     $fatherName = trim($_POST['father_name'] ?? '');
+    $fatherNameEn = trim($_POST['father_name_en'] ?? '');
     $fatherPhone = trim($_POST['father_phone'] ?? '');
     $motherName = trim($_POST['mother_name'] ?? '');
-    $guardianPhone = trim($_POST['guardian_phone'] ?? '');
+    $motherNameEn = trim($_POST['mother_name_en'] ?? '');
+    $motherPhone = trim($_POST['mother_phone'] ?? '');
     $address = trim($_POST['address'] ?? '');
     $religion = $_POST['religion'] ?? 'islam';
     $bloodGroup = $_POST['blood_group'] ?? '';
     $prevSchool = trim($_POST['prev_school'] ?? '');
     $birthCert = trim($_POST['birth_cert'] ?? '');
 
+    // অভিভাবকের ফোন — পিতার টা থাকলে পিতার, না থাকলে মাতার
+    $guardianPhone = $fatherPhone ?: $motherPhone;
+
     if (!$name || !$classId) {
         setFlash('danger', 'নাম ও শ্রেণী আবশ্যক।');
     } else {
-        $studentId = generateStudentId($classId);
-        $rollNo = $db->query("SELECT COUNT(*)+1 FROM students WHERE class_id=$classId AND academic_year='".date('Y')."'")->fetchColumn();
+        // Random Unique Student ID: ANT-YYYY-XXXX
+        do {
+            $rand = strtoupper(substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 4));
+            $studentId = 'ANT-' . date('Y') . '-' . $rand;
+            $exists = $db->prepare("SELECT id FROM students WHERE student_id=?");
+            $exists->execute([$studentId]);
+        } while ($exists->fetch());
+
+        // Secret Code — 6 digit alphanumeric
+        do {
+            $secretCode = strtoupper(substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 6));
+            $secExists = $db->prepare("SELECT id FROM students WHERE secret_code=?");
+            $secExists->execute([$secretCode]);
+        } while ($secExists->fetch());
+
+        // Roll Number — last roll + 1 for this class
+        $rollNo = $db->query("SELECT COALESCE(MAX(roll_number),0)+1 FROM students WHERE class_id=$classId AND academic_year='".date('Y')."'")->fetchColumn();
 
         // Photo upload
         $photo = null;
@@ -49,30 +69,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $db->prepare("INSERT INTO students 
             (student_id, roll_number, name, name_bn, date_of_birth, gender, religion, blood_group,
-             class_id, section_id, academic_year, admission_date, father_name, father_phone, mother_name,
-             guardian_phone, address_present, previous_school, birth_certificate_no, photo, status, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+             class_id, section_id, academic_year, admission_date, father_name, father_name_en, father_phone,
+             mother_name, mother_name_en, mother_phone, guardian_phone, address_present, 
+             previous_school, birth_certificate_no, photo, secret_code, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
         $stmt->execute([
             $studentId, $rollNo, $name, $nameBn, $dob ?: null, $gender, $religion, $bloodGroup,
-            $classId, $sectionId, date('Y'), $admDate, $fatherName, $fatherPhone, $motherName,
-            $guardianPhone, $address, $prevSchool, $birthCert, $photo, 'active'
+            $classId, $sectionId, date('Y'), $admDate, $fatherName, $fatherNameEn, $fatherPhone,
+            $motherName, $motherNameEn, $motherPhone, $guardianPhone, $address,
+            $prevSchool, $birthCert, $photo, $secretCode, 'active'
         ]);
         $newId = $db->lastInsertId();
 
-        // Create parent user account if phone provided
-        if ($guardianPhone || $fatherPhone) {
-            $phone = $guardianPhone ?: $fatherPhone;
+        // Create parent user account
+        if ($guardianPhone) {
             $existing = $db->prepare("SELECT id FROM users WHERE phone=?");
-            $existing->execute([$phone]);
+            $existing->execute([$guardianPhone]);
             if (!$existing->fetch()) {
-                $hashedPw = password_hash($phone, PASSWORD_DEFAULT);
+                $hashedPw = password_hash($guardianPhone, PASSWORD_DEFAULT);
                 $uStmt = $db->prepare("INSERT INTO users (name, name_bn, username, phone, password, role_id) VALUES (?,?,?,?,?,5)");
-                $uStmt->execute([$fatherName ?: 'অভিভাবক', $fatherName, $phone, $phone, $hashedPw]);
+                $uStmt->execute([$fatherName ?: 'অভিভাবক', $fatherName, $guardianPhone, $guardianPhone, $hashedPw]);
             }
         }
 
         logActivity($_SESSION['user_id'], 'student_admit', 'students', "ছাত্র ভর্তি: $name ($studentId)");
-        setFlash('success', "ছাত্র সফলভাবে ভর্তি হয়েছে! ID: $studentId");
+        setFlash('success', "ছাত্র সফলভাবে ভর্তি হয়েছে! ID: $studentId | Secret Code: $secretCode");
         header('Location: view.php?id=' . $newId);
         exit;
     }
@@ -194,24 +215,32 @@ require_once '../../includes/header.php';
         <div class="form-grid">
             <div class="form-group">
                 <label>পিতার নাম (বাংলায়)</label>
-                <input type="text" name="father_name" class="form-control">
+                <input type="text" name="father_name" class="form-control" placeholder="আব্দুর রহমান">
             </div>
             <div class="form-group">
-                <label>পিতার মোবাইল <span style="color:var(--info);">(লগইন নম্বর)</span></label>
+                <label>পিতার নাম (ইংরেজিতে)</label>
+                <input type="text" name="father_name_en" class="form-control" placeholder="Abdur Rahman">
+            </div>
+            <div class="form-group">
+                <label>পিতার মোবাইল</label>
                 <input type="tel" name="father_phone" class="form-control" placeholder="01XXXXXXXXX">
             </div>
             <div class="form-group">
-                <label>মাতার নাম</label>
-                <input type="text" name="mother_name" class="form-control">
+                <label>মাতার নাম (বাংলায়)</label>
+                <input type="text" name="mother_name" class="form-control" placeholder="ফাতেমা বেগম">
             </div>
             <div class="form-group">
-                <label>অভিভাবকের মোবাইল</label>
-                <input type="tel" name="guardian_phone" class="form-control" placeholder="01XXXXXXXXX">
+                <label>মাতার নাম (ইংরেজিতে)</label>
+                <input type="text" name="mother_name_en" class="form-control" placeholder="Fatema Begum">
+            </div>
+            <div class="form-group">
+                <label>মাতার মোবাইল</label>
+                <input type="tel" name="mother_phone" class="form-control" placeholder="01XXXXXXXXX">
             </div>
         </div>
-        <div class="alert alert-info mt-16">
+        <div class="alert alert-info mt-16" style="padding:10px 14px;background:#ebf5fb;border-radius:8px;font-size:13px;">
             <i class="fas fa-info-circle"></i>
-            পিতা/অভিভাবকের ফোন নম্বর দিয়ে স্বয়ংক্রিয়ভাবে অভিভাবক পোর্টাল অ্যাকাউন্ট তৈরি হবে। পাসওয়ার্ড হবে ফোন নম্বর।
+            পিতার মোবাইল থাকলে সেটা অভিভাবকের নম্বর হিসেবে ব্যবহার হবে। না থাকলে মাতার নম্বর ব্যবহার হবে।
         </div>
     </div>
 </div>
