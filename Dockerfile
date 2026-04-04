@@ -26,4 +26,4 @@ RUN mkdir -p assets/uploads/students \
     && chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
-CMD ["/usr/sbin/apachectl", "-D", "FOREGROUND"]
+CMD ["/usr/sbin/apachect", "-D", "FOREGROUND"]
