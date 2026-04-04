@@ -52,7 +52,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['import'])) {
         $fatherName  = trim($row[2] ?? '');
         $fatherPhone = trim($row[3] ?? '');
         $motherName  = trim($row[4] ?? '');
-        $rowClassId  = !empty($row[5]) ? (int)$row[5] : $classId;
+        $rowClassNameOrId = trim($row[5] ?? '');
+if (is_numeric($rowClassNameOrId)) {
+    $rowClassId = (int)$rowClassNameOrId ?: $classId;
+} else {
+    $cls = $db->prepare("SELECT id FROM classes WHERE class_name_bn=? AND is_active=1");
+    $cls->execute([$rowClassNameOrId]);
+    $rowClassId = (int)($cls->fetchColumn() ?: $classId);
+}
         $dob         = trim($row[6] ?? '') ?: null;
         $gender      = strtolower(trim($row[7] ?? 'male'));
         $address     = trim($row[8] ?? '');
