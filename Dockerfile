@@ -13,7 +13,7 @@ RUN rm -f /etc/apache2/mods-enabled/mpm_* \
 
 RUN a2enmod rewrite php7.4 \
     && echo "ServerName localhost" >> /etc/apache2/apache2.conf \
-    && sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf \
+    && sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
 WORKDIR /var/www/html
 COPY . .
@@ -24,4 +24,4 @@ RUN mkdir -p assets/uploads/students \
     && chown -R www-data:www-data /var/www/html
 
 EXPOSE 80
-CMD ["/usr/sbin/apachect", "-D", "FOREGROUND"]
+CMD ["/bin/bash", "start.sh"]
