@@ -86,8 +86,14 @@ echo "✅ ============================================"
 echo ""
 
 # Configure PORT
-echo "Listen ${PORT:-80}" > /etc/apache2/ports.conf
-sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${PORT:-80}>/g" /etc/apache2/sites-enabled/000-default.conf
+PORT="${PORT:-80}"
+echo "Listen $PORT" > /etc/apache2/ports.conf
+echo "<VirtualHost *:$PORT>
+    DocumentRoot /var/www/html
+    <Directory /var/www/html>
+        AllowOverride All
+    </Directory>
+</VirtualHost>" > /etc/apache2/sites-enabled/000-default.conf
 
 # Start Apache
 exec apache2-foreground
