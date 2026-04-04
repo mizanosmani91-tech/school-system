@@ -85,5 +85,9 @@ echo "✅  Login: admin / password"
 echo "✅ ============================================"
 echo ""
 
+# Configure PORT
+echo "Listen ${PORT:-80}" > /etc/apache2/ports.conf
+sed -i "s/<VirtualHost \*:80>/<VirtualHost *:${PORT:-80}>/g" /etc/apache2/sites-enabled/000-default.conf
+
 # Start Apache
 exec apache2-foreground
