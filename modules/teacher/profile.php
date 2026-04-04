@@ -1,6 +1,6 @@
 <?php
 require_once '../../includes/functions.php';
-requireLogin(['super_admin','principal','teacher']);
+requireLogin();
 $pageTitle = 'শিক্ষকের প্রোফাইল';
 $db = getDB();
 
@@ -9,7 +9,7 @@ $currentUserId = $_SESSION['user_id'];
 
 // Admin হলে ?id= দিয়ে যেকোনো শিক্ষক দেখতে পারবে
 // Teacher হলে শুধু নিজেরটা
-$isAdmin = in_array($currentRole, ['super_admin','principal']);
+$isAdmin = !empty($_SESSION['role_slug']) && in_array($_SESSION['role_slug'], ['super_admin','principal','admin','administrator']);
 
 if ($isAdmin && isset($_GET['id'])) {
     $teacherDbId = (int)$_GET['id'];
