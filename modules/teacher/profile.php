@@ -115,17 +115,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password']) && 
 
 // এই মাসের উপস্থিতি
 $month = date('Y-m');
-$attStmt = $db->prepare("SELECT COUNT(*) FROM teacher_attendance WHERE teacher_id=? AND DATE_FORMAT(date,'%Y-%m')=? AND status='present'");
-$attStmt->execute([$teacher['id'], $month]);
-$presentDays = $attStmt->fetchColumn();
-
-// মোট কার্যদিবস এই মাসে
-$totalWorkDays = $db->query("SELECT COUNT(DISTINCT date) FROM teacher_attendance WHERE DATE_FORMAT(date,'%Y-%m')='$month'")->fetchColumn() ?: 0;
+$presentDays = 0;
+$totalWorkDays = 0;
+try {
+    $attStmt = $db->prepare("SELECT COUNT(*) FROM teacher_attendance WHERE teacher_id=? AND DATE_FORMAT(date,'%Y-%m')=? AND status='present'");
+    $attStmt->execute([$teacher['id'], $month]);
+    $presentDays = $attStmt->fetchColumn();
+    $totalWorkDays = $db->query("SELECT COUNT(DISTINCT date) FROM teacher_attendance WHERE DATE_FORMAT(date,'%Y-%m')='$month'")->fetchColumn() ?: 0;
+} catch (Exception $e) { /* টেবিল নেই */ }
 
 // বেতনের ইতিহাস (শেষ ৬ মাস)
-$salaryHistory = $db->prepare("SELECT * FROM salary_payments WHERE teacher_id=? ORDER BY payment_date DESC LIMIT 6");
-$salaryHistory->execute([$teacher['id']]);
-$salaryHistory = $salaryHistory->fetchAll();
+$salaryHistory = [];
+try {
+    $salaryStmt = $db->prepare("SELECT * FROM salary_payments WHERE teacher_id=? ORDER BY payment_date DESC LIMIT 6");
+    $salaryStmt->execute([$teacher['id']]);
+    $salaryHistory = $salaryStmt->fetchAll();
+} catch (Exception $e) { /* টেবিল নেই */ }
 
 // ছুটির আবেদন তালিকা
 $leavesStmt = $db->prepare("SELECT * FROM teacher_leaves WHERE teacher_id=? ORDER BY created_at DESC LIMIT 15");
