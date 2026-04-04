@@ -18,8 +18,8 @@ RUN a2enmod rewrite php7.4 \
     && sed -i 's/<VirtualHost \*:80>/<VirtualHost *:${PORT:-80}>/g' /etc/apache2/sites-available/000-default.conf
 
 WORKDIR /var/www/html
-RUN rm -f index.html
 COPY . .
+RUN rm -f index.html
 
 RUN mkdir -p assets/uploads/students \
     && chmod -R 777 assets/uploads \
