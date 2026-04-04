@@ -81,6 +81,48 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
+<!-- Secret Code Box -->
+<?php if ($student['secret_code']): ?>
+<div class="card mb-24 no-print" style="border:2px dashed #e67e22;">
+    <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <i class="fas fa-key" style="font-size:22px;color:#e67e22;"></i>
+            <div>
+                <div style="font-size:12px;color:#718096;font-weight:600;">অভিভাবক/ছাত্র লগইনের জন্য Secret Code</div>
+                <div style="font-size:22px;font-weight:700;color:#e67e22;letter-spacing:4px;"><?=e($student['secret_code'])?></div>
+                <div style="font-size:11px;color:#a0aec0;margin-top:2px;">Student ID: <?=e($student['student_id'])?> | এই কোড গোপন রাখুন</div>
+            </div>
+        </div>
+        <button onclick="printSlip()" class="btn btn-sm" style="background:#e67e22;color:#fff;">
+            <i class="fas fa-print"></i> Admission Slip প্রিন্ট
+        </button>
+    </div>
+</div>
+
+<!-- Print Slip (hidden, shown only when printing) -->
+<div id="admissionSlip" style="display:none;">
+    <div style="font-family:'Hind Siliguri',sans-serif;max-width:400px;margin:0 auto;border:2px solid #1a5276;border-radius:12px;padding:24px;">
+        <div style="text-align:center;margin-bottom:16px;">
+            <div style="font-size:20px;font-weight:700;color:#1a5276;"><?=e(getSetting('institute_name','মাদ্রাসা'))?></div>
+            <div style="font-size:12px;color:#718096;">ভর্তি নিশ্চিতকরণ স্লিপ</div>
+        </div>
+        <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <tr><td style="padding:6px 0;color:#718096;width:130px;">ছাত্রের নাম</td><td style="font-weight:700;"><?=e($student['name_bn']??$student['name'])?></td></tr>
+            <tr><td style="padding:6px 0;color:#718096;">শ্রেণী</td><td style="font-weight:700;"><?=e($student['class_name_bn'])?> <?=e($student['section_name']??'')?></td></tr>
+            <tr><td style="padding:6px 0;color:#718096;">রোল নম্বর</td><td style="font-weight:700;"><?=e($student['roll_number'])?></td></tr>
+            <tr><td style="padding:6px 0;color:#718096;">Student ID</td><td style="font-weight:700;color:#1a5276;"><?=e($student['student_id'])?></td></tr>
+            <tr><td style="padding:6px 0;color:#718096;">ভর্তির তারিখ</td><td><?=e($student['admission_date'])?></td></tr>
+        </table>
+        <div style="margin-top:16px;background:#fff8f0;border:2px dashed #e67e22;border-radius:8px;padding:14px;text-align:center;">
+            <div style="font-size:12px;color:#718096;margin-bottom:6px;">অভিভাবক পোর্টাল লগইনের জন্য</div>
+            <div style="font-size:13px;color:#1a5276;">Student ID: <strong><?=e($student['student_id'])?></strong></div>
+            <div style="font-size:24px;font-weight:700;color:#e67e22;letter-spacing:6px;margin-top:4px;"><?=e($student['secret_code'])?></div>
+            <div style="font-size:11px;color:#a0aec0;margin-top:6px;">এই কোড গোপন রাখুন — শুধু অভিভাবকের সাথে শেয়ার করুন</div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- Stats Row -->
 <div class="stat-grid" style="margin-bottom:24px;">
     <div class="stat-card blue">
@@ -203,5 +245,21 @@ require_once '../../includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+function printSlip() {
+    const slip = document.getElementById('admissionSlip').innerHTML;
+    const win = window.open('', '_blank', 'width=500,height=600');
+    win.document.write(`
+        <html><head>
+        <meta charset="UTF-8">
+        <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+        <style>body{margin:20px;background:#fff;} @media print{body{margin:0;}}</style>
+        </head><body>${slip}</body></html>
+    `);
+    win.document.close();
+    setTimeout(() => { win.print(); win.close(); }, 800);
+}
+</script>
 
 <?php require_once '../../includes/footer.php'; ?>
