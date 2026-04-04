@@ -10,39 +10,69 @@ if (isset($_SESSION['user_id'])) {
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
-    $password = $_POST['password'] ?? '';
+    $login_type = $_POST['login_type'] ?? 'admin';
 
-    if ($username && $password) {
-        $db = getDB();
-        $stmt = $db->prepare("SELECT u.*, r.role_name, r.role_slug FROM users u JOIN roles r ON u.role_id = r.id WHERE (u.username = ? OR u.phone = ?) AND u.is_active = 1");
-        $stmt->execute([$username, $username]);
-        $user = $stmt->fetch();
+    if ($login_type === 'parent' || $login_type === 'student') {
+        // Parent / Student login via Student ID + Secret Code
+        $student_id  = trim($_POST['student_id'] ?? '');
+        $secret_code = trim($_POST['secret_code'] ?? '');
 
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_name'] = $user['name'];
-            $_SESSION['role_slug'] = $user['role_slug'];
-            $_SESSION['role_id'] = $user['role_id'];
+        if ($student_id && $secret_code) {
+            $db   = getDB();
+            $stmt = $db->prepare("SELECT * FROM students WHERE student_id = ? AND secret_code = ? AND status = 'active'");
+            $stmt->execute([$student_id, $secret_code]);
+            $student = $stmt->fetch();
 
-            // Update last login
-            $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
-            logActivity($user['id'], 'login', 'auth', 'লগইন সফল');
-
-            // Redirect by role
-            if ($user['role_slug'] === 'parent') {
-                header('Location: ' . BASE_URL . '/modules/parent/portal.php');
-            } elseif ($user['role_slug'] === 'student') {
-                header('Location: ' . BASE_URL . '/modules/student/portal.php');
+            if ($student) {
+                if ($login_type === 'parent') {
+                    $_SESSION['parent_student_id'] = $student['id'];
+                    $_SESSION['user_name']          = $student['guardian_name'] ?? $student['name'];
+                    $_SESSION['role_slug']           = 'parent';
+                    logActivity(0, 'parent_login', 'auth', 'অভিভাবক লগইন: ' . $student_id);
+                    header('Location: ' . BASE_URL . '/modules/parent/portal.php');
+                } else {
+                    $_SESSION['student_id']  = $student['id'];
+                    $_SESSION['user_name']   = $student['name'];
+                    $_SESSION['role_slug']   = 'student';
+                    logActivity(0, 'student_login', 'auth', 'ছাত্র লগইন: ' . $student_id);
+                    header('Location: ' . BASE_URL . '/modules/student/portal.php');
+                }
+                exit;
             } else {
-                header('Location: ' . BASE_URL . '/index.php');
+                $error = 'Student ID বা Secret Code ভুল।';
             }
-            exit;
         } else {
-            $error = 'ব্যবহারকারীর নাম বা পাসওয়ার্ড ভুল।';
+            $error = 'Student ID এবং Secret Code দিন।';
         }
+
     } else {
-        $error = 'সকল তথ্য পূরণ করুন।';
+        // Admin / Teacher login via username + password
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if ($username && $password) {
+            $db   = getDB();
+            $stmt = $db->prepare("SELECT u.*, r.role_name, r.role_slug FROM users u JOIN roles r ON u.role_id = r.id WHERE (u.username = ? OR u.phone = ?) AND u.is_active = 1");
+            $stmt->execute([$username, $username]);
+            $user = $stmt->fetch();
+
+            if ($user && password_verify($password, $user['password'])) {
+                $_SESSION['user_id']   = $user['id'];
+                $_SESSION['user_name'] = $user['name'];
+                $_SESSION['role_slug'] = $user['role_slug'];
+                $_SESSION['role_id']   = $user['role_id'];
+
+                $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
+                logActivity($user['id'], 'login', 'auth', 'লগইন সফল');
+
+                header('Location: ' . BASE_URL . '/index.php');
+                exit;
+            } else {
+                $error = 'ব্যবহারকারীর নাম বা পাসওয়ার্ড ভুল।';
+            }
+        } else {
+            $error = 'সকল তথ্য পূরণ করুন।';
+        }
     }
 }
 
@@ -90,10 +120,10 @@ body {
 .banner-features i { color: #f0a500; }
 
 .login-form-side { padding: 48px 40px; }
-.login-logo { margin-bottom: 32px; }
+.login-logo { margin-bottom: 28px; }
 .login-logo h1 { font-size: 22px; font-weight: 700; color: #0d2137; }
-.login-logo p { font-size: 13px; color: #718096; margin-top: 4px; }
-.form-title { font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 24px; }
+.login-logo p  { font-size: 13px; color: #718096; margin-top: 4px; }
+.form-title { font-size: 18px; font-weight: 700; color: #1a202c; margin-bottom: 20px; }
 .form-group { margin-bottom: 18px; }
 .form-group label { display: block; font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 7px; }
 .input-wrap { position: relative; }
@@ -116,7 +146,6 @@ body {
     padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px;
     display: flex; align-items: center; gap: 8px; }
 .login-links { margin-top: 20px; text-align: center; font-size: 13px; color: #718096; }
-.login-links a { color: #2471a3; text-decoration: none; font-weight: 600; }
 .portal-tabs { display: flex; gap: 8px; margin-bottom: 24px; }
 .portal-tab {
     flex: 1; padding: 9px; text-align: center; border: 1.5px solid #e2e8f0;
@@ -124,6 +153,15 @@ body {
     transition: all .2s;
 }
 .portal-tab.active { border-color: #1a5276; background: #ebf5fb; color: #1a5276; font-weight: 700; }
+
+/* hint box for student/parent login */
+.hint-box {
+    background: #f0f9ff; border: 1px solid #bee3f8; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #2c5282; margin-bottom: 16px;
+    line-height: 1.7;
+}
+.hint-box i { margin-right: 5px; }
+
 @media (max-width: 700px) {
     .login-container { grid-template-columns: 1fr; }
     .login-banner { display: none; }
@@ -133,6 +171,7 @@ body {
 </head>
 <body>
 <div class="login-container">
+    <!-- Banner -->
     <div class="login-banner">
         <i class="fas fa-mosque banner-icon"></i>
         <h2 class="banner-title"><?= e($instituteName) ?></h2>
@@ -146,36 +185,106 @@ body {
             <li><i class="fas fa-check-circle"></i> AI সহকারী</li>
         </ul>
     </div>
+
+    <!-- Form Side -->
     <div class="login-form-side">
         <div class="login-logo">
             <h1>স্বাগতম</h1>
             <p>আপনার অ্যাকাউন্টে প্রবেশ করুন</p>
         </div>
 
+        <!-- Tabs -->
         <div class="portal-tabs">
-            <div class="portal-tab active" onclick="setPortal('admin', this)"><i class="fas fa-user-shield"></i> অ্যাডমিন/শিক্ষক</div>
-            <div class="portal-tab" onclick="setPortal('parent', this)"><i class="fas fa-users"></i> অভিভাবক</div>
-            <div class="portal-tab" onclick="setPortal('student', this)"><i class="fas fa-user-graduate"></i> ছাত্র</div>
+            <div class="portal-tab active" id="tab-admin"   onclick="setPortal('admin')">
+                <i class="fas fa-user-shield"></i> অ্যাডমিন/শিক্ষক
+            </div>
+            <div class="portal-tab" id="tab-parent"  onclick="setPortal('parent')">
+                <i class="fas fa-users"></i> অভিভাবক
+            </div>
+            <div class="portal-tab" id="tab-student" onclick="setPortal('student')">
+                <i class="fas fa-user-graduate"></i> ছাত্র
+            </div>
         </div>
 
         <?php if ($error): ?>
         <div class="error-box"><i class="fas fa-exclamation-circle"></i> <?= e($error) ?></div>
         <?php endif; ?>
 
-        <form method="POST" action="">
+        <!-- ===== Admin / Teacher form ===== -->
+        <form method="POST" action="" id="form-admin">
+            <input type="hidden" name="login_type" value="admin">
             <p class="form-title">লগইন করুন</p>
             <div class="form-group">
                 <label>ব্যবহারকারীর নাম / ফোন নম্বর</label>
                 <div class="input-wrap">
                     <i class="fas fa-user"></i>
-                    <input type="text" name="username" placeholder="username বা 01XXXXXXXXX" value="<?= e($_POST['username'] ?? '') ?>" required>
+                    <input type="text" name="username" placeholder="username বা 01XXXXXXXXX"
+                           value="<?= e($_POST['username'] ?? '') ?>" required>
                 </div>
             </div>
             <div class="form-group">
                 <label>পাসওয়ার্ড</label>
                 <div class="input-wrap">
                     <i class="fas fa-lock"></i>
-                    <input type="password" name="password" placeholder="••••••••" required id="pwdField">
+                    <input type="password" name="password" placeholder="••••••••" required>
+                </div>
+            </div>
+            <button type="submit" class="btn-login">
+                <i class="fas fa-sign-in-alt"></i> প্রবেশ করুন
+            </button>
+        </form>
+
+        <!-- ===== Parent form ===== -->
+        <form method="POST" action="" id="form-parent" style="display:none;">
+            <input type="hidden" name="login_type" value="parent">
+            <p class="form-title">অভিভাবক লগইন</p>
+            <div class="hint-box">
+                <i class="fas fa-info-circle"></i>
+                ভর্তির সময় দেওয়া <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করুন।
+                (Admission Slip-এ পাবেন)
+            </div>
+            <div class="form-group">
+                <label>Student ID</label>
+                <div class="input-wrap">
+                    <i class="fas fa-id-card"></i>
+                    <input type="text" name="student_id" placeholder="ANT-2025-XXXX"
+                           value="<?= e($_POST['student_id'] ?? '') ?>" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Secret Code</label>
+                <div class="input-wrap">
+                    <i class="fas fa-key"></i>
+                    <input type="password" name="secret_code" placeholder="••••••" required>
+                </div>
+            </div>
+            <button type="submit" class="btn-login">
+                <i class="fas fa-sign-in-alt"></i> প্রবেশ করুন
+            </button>
+        </form>
+
+        <!-- ===== Student form ===== -->
+        <form method="POST" action="" id="form-student" style="display:none;">
+            <input type="hidden" name="login_type" value="student">
+            <p class="form-title">ছাত্র লগইন</p>
+            <div class="hint-box">
+                <i class="fas fa-info-circle"></i>
+                তোমার <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করো।
+                (Admission Slip-এ পাবে)
+            </div>
+            <div class="form-group">
+                <label>Student ID</label>
+                <div class="input-wrap">
+                    <i class="fas fa-id-card"></i>
+                    <input type="text" name="student_id" placeholder="ANT-2025-XXXX"
+                           value="<?= e($_POST['student_id'] ?? '') ?>" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Secret Code</label>
+                <div class="input-wrap">
+                    <i class="fas fa-key"></i>
+                    <input type="password" name="secret_code" placeholder="••••••" required>
                 </div>
             </div>
             <button type="submit" class="btn-login">
@@ -184,25 +293,31 @@ body {
         </form>
 
         <div class="login-links">
-            <p style="margin-top:16px;background:#f7fafc;padding:12px;border-radius:8px;font-size:12px;line-height:1.8;">
+            <p id="demo-hint" style="margin-top:16px;background:#f7fafc;padding:12px;border-radius:8px;font-size:12px;line-height:1.8;">
                 <strong>ডেমো লগইন:</strong><br>
                 অ্যাডমিন: <code>admin</code> / <code>password</code><br>
-                অভিভাবক পোর্টালের জন্য ফোন নম্বর দিয়ে লগইন করুন
+                অভিভাবক/ছাত্র: Student ID + Secret Code (Admission Slip দেখুন)
             </p>
         </div>
     </div>
 </div>
+
 <script>
-function setPortal(type, el) {
+// On page load — restore active tab if POST returned error
+(function () {
+    const lt = <?= json_encode($_POST['login_type'] ?? 'admin') ?>;
+    if (lt && lt !== 'admin') setPortal(lt);
+})();
+
+function setPortal(type) {
+    // tabs
     document.querySelectorAll('.portal-tab').forEach(t => t.classList.remove('active'));
-    el.classList.add('active');
-    const userField = document.querySelector('input[name="username"]');
-    const hints = {
-        admin: 'username বা 01XXXXXXXXX',
-        parent: 'অভিভাবকের ফোন নম্বর',
-        student: 'ছাত্রের ID বা ফোন নম্বর'
-    };
-    userField.placeholder = hints[type];
+    document.getElementById('tab-' + type).classList.add('active');
+
+    // forms
+    ['admin','parent','student'].forEach(f => {
+        document.getElementById('form-' + f).style.display = (f === type) ? 'block' : 'none';
+    });
 }
 </script>
 </body>
