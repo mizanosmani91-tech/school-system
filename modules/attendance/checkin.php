@@ -131,7 +131,7 @@ if (in_array($_SESSION['role_slug'], ['super_admin','principal'])) {
         JOIN teachers t ON ta.teacher_id=t.id WHERE ta.date='$today' ORDER BY ta.check_in")->fetchAll();
 }
 
-require_once '../../includes/header.php';
+require_once '../../includes/teacher_header.php';
 ?>
 
 <div class="section-header">
