@@ -65,7 +65,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
                 logActivity($user['id'], 'login', 'auth', 'লগইন সফল');
 
-                header('Location: ' . BASE_URL . '/index.php');
+                // Role অনুযায়ী আলাদা ড্যাশবোর্ডে পাঠানো
+                if ($user['role_slug'] === 'teacher') {
+                    header('Location: ' . BASE_URL . '/modules/teacher/dashboard.php');
+                } else {
+                    header('Location: ' . BASE_URL . '/index.php');
+                }
                 exit;
             } else {
                 $error = 'ব্যবহারকারীর নাম বা পাসওয়ার্ড ভুল।';
