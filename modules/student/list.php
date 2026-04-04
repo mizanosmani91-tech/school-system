@@ -43,6 +43,7 @@ require_once '../../includes/header.php';
     <h2 class="section-title"><i class="fas fa-user-graduate"></i> ছাত্র তালিকা</h2>
     <div style="display:flex;gap:8px;">
         <a href="admission.php" class="btn btn-primary btn-sm"><i class="fas fa-user-plus"></i> নতুন ভর্তি</a>
+        <a href="bulk_import.php" class="btn btn-success btn-sm"><i class="fas fa-file-excel"></i> বাল্ক আমদানি</a>
         <button onclick="window.print()" class="btn btn-outline btn-sm no-print"><i class="fas fa-print"></i> প্রিন্ট</button>
     </div>
 </div>
