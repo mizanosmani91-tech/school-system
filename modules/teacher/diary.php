@@ -45,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_diary'])) {
     $homework  = trim($_POST['homework']??'');
     $nextTopic = trim($_POST['next_topic']??'');
     $status    = $_POST['lesson_status']??'completed';
-    $teacherId = $teacher['id'] ?? null;
+    $teacherId = $teacher['id'] ?? null; // admin হলে null থাকবে
 
     $stmt = $db->prepare("INSERT INTO class_diary
         (teacher_id,class_id,subject_id,date,topic,topic_bn,description,homework,next_topic,lesson_status,created_by)
@@ -88,14 +88,14 @@ $stmt = $db->prepare("SELECT cd.*, c.class_name_bn, s.subject_name_bn, t.name_bn
     LEFT JOIN classes c ON cd.class_id=c.id
     LEFT JOIN subjects s ON cd.subject_id=s.id
     LEFT JOIN teachers t ON cd.teacher_id=t.id
-    WHERE $whereStr ORDER BY cd.date DESC, cd.created_at DESC
+    WHERE $whereStr ORDER BY cd.`date` DESC, cd.created_at DESC
     LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $diaries = $stmt->fetchAll();
 
 $teachers = $db->query("SELECT t.id, t.name_bn FROM teachers t WHERE t.is_active=1 ORDER BY t.name_bn")->fetchAll();
 
-require_once '../../includes/header.php';
+require_once ($_SESSION['role_slug']==='teacher') ? '../../includes/teacher_header.php' : '../../includes/header.php';
 ?>
 
 <div class="section-header">
