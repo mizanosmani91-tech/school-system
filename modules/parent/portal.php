@@ -44,6 +44,27 @@ foreach ($myStudents as $s) { if ($s['id'] == $activeStudentId) { $activeStudent
 
 $tab = $_GET['tab'] ?? 'overview';
 
+// Notifications
+$notifications = [];
+$unreadNotifCount = 0;
+if ($activeStudentId) {
+    $notifStmt = $db->prepare("SELECT pn.*, s.subject_name_bn, t.name_bn as teacher_name_bn
+        FROM parent_notifications pn
+        LEFT JOIN subjects s ON pn.subject_id = s.id
+        LEFT JOIN teachers t ON pn.teacher_id = t.id
+        WHERE pn.student_id = ? ORDER BY pn.created_at DESC LIMIT 20");
+    $notifStmt->execute([$activeStudentId]);
+    $notifications = $notifStmt->fetchAll();
+
+    $unreadStmt = $db->prepare("SELECT COUNT(*) FROM parent_notifications WHERE student_id=? AND is_read=0");
+    $unreadStmt->execute([$activeStudentId]);
+    $unreadNotifCount = $unreadStmt->fetchColumn();
+
+    if ($tab === 'notifications') {
+        $db->prepare("UPDATE parent_notifications SET is_read=1 WHERE student_id=?")->execute([$activeStudentId]);
+    }
+}
+
 // Send message
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
     $msg = trim($_POST['message'] ?? '');
@@ -217,10 +238,16 @@ tbody tr:hover { background: #f7fafc; }
 <?php elseif ($activeStudent): ?>
 
 <div class="tabs">
-    <?php $tabs = ['overview'=>'<i class="fas fa-home"></i> সংক্ষিপ্ত','attendance'=>'<i class="fas fa-clipboard-check"></i> উপস্থিতি','results'=>'<i class="fas fa-file-alt"></i> ফলাফল','fees'=>'<i class="fas fa-money-bill"></i> ফি','notices'=>'<i class="fas fa-bullhorn"></i> নোটিশ','messages'=>'<i class="fas fa-comments"></i> বার্তা'];
-    foreach ($tabs as $k=>$v): ?>
+    <?php $navTabs = ['overview'=>'<i class="fas fa-home"></i> সংক্ষিপ্ত','attendance'=>'<i class="fas fa-clipboard-check"></i> উপস্থিতি','results'=>'<i class="fas fa-file-alt"></i> ফলাফল','fees'=>'<i class="fas fa-money-bill"></i> ফি','notices'=>'<i class="fas fa-bullhorn"></i> নোটিশ','messages'=>'<i class="fas fa-comments"></i> বার্তা'];
+    foreach ($navTabs as $k=>$v): ?>
     <a href="?student_id=<?= $activeStudentId ?>&tab=<?= $k ?>" class="tab <?= $tab === $k ? 'active' : '' ?>"><?= $v ?></a>
     <?php endforeach; ?>
+    <a href="?student_id=<?=$activeStudentId?>&tab=notifications" class="tab <?=$tab==='notifications'?'active':''?>">
+        <i class="fas fa-bell"></i> সতর্কতা
+        <?php if ($unreadNotifCount > 0): ?>
+        <span style="background:#c0392b;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;font-weight:700;margin-left:2px;"><?= $unreadNotifCount ?></span>
+        <?php endif; ?>
+    </a>
 </div>
 
 <div class="content">
@@ -431,9 +458,47 @@ tbody tr:hover { background: #f7fafc; }
             </form>
         </div>
     </div>
+    <?php elseif ($tab === 'notifications'): ?>
+    <!-- NOTIFICATIONS -->
+    <div class="card">
+        <div class="card-header" style="justify-content:space-between;">
+            <span class="card-title"><i class="fas fa-bell"></i> শিক্ষকের সতর্কতা বার্তা</span>
+            <?php if ($unreadNotifCount > 0): ?>
+            <span class="badge badge-danger"><?= $unreadNotifCount ?> টি নতুন</span>
+            <?php endif; ?>
+        </div>
+        <div class="card-body" style="padding:0;">
+            <?php if (empty($notifications)): ?>
+            <div style="text-align:center;padding:40px;color:#718096;">
+                <i class="fas fa-check-circle" style="font-size:40px;color:#27ae60;display:block;margin-bottom:12px;opacity:.7;"></i>
+                কোনো সতর্কতা নেই — সব ঠিকঠাক আছে!
+            </div>
+            <?php else: foreach ($notifications as $n): ?>
+            <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;background:<?= $n['is_read'] ? '#fff' : '#fff8f0' ?>;">
+                <div style="width:40px;height:40px;border-radius:10px;background:#fff3cd;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fas fa-exclamation-triangle" style="color:#e67e22;"></i>
+                </div>
+                <div style="flex:1;">
+                    <div style="font-size:14px;line-height:1.7;"><?= e($n['message']) ?></div>
+                    <div style="display:flex;gap:8px;margin-top:7px;flex-wrap:wrap;align-items:center;">
+                        <?php if ($n['subject_name_bn']): ?>
+                        <span class="badge badge-warning"><?= e($n['subject_name_bn']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($n['teacher_name_bn']): ?>
+                        <span class="badge badge-info"><i class="fas fa-chalkboard-teacher" style="margin-right:3px;"></i><?= e($n['teacher_name_bn']) ?></span>
+                        <?php endif; ?>
+                        <span style="font-size:11px;color:#718096;"><?= banglaDate($n['created_at']) ?></span>
+                        <?php if (!$n['is_read']): ?>
+                        <span class="badge badge-danger" style="font-size:10px;">নতুন</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; endif; ?>
+        </div>
+    </div>
+
     <?php endif; ?>
-</div>
-<?php endif; ?>
 
 </body>
 </html>
