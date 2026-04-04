@@ -320,6 +320,9 @@ if (isset($parentLayout) && $parentLayout) {
         <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item">
             <i class="fas fa-clipboard-check"></i> উপস্থিতি
         </a>
+        <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'checkin.php' ? 'active' : '') ?>">
+            <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
+        </a>
         <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item">
             <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
         </a>
