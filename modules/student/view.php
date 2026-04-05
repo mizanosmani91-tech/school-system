@@ -40,6 +40,38 @@ $feeHistory = $fees->fetchAll();
 $totalPaid = $db->prepare("SELECT COALESCE(SUM(paid_amount),0) FROM fee_collections WHERE student_id=? AND YEAR(payment_date)=?");
 $totalPaid->execute([$id, date('Y')]); $totalFee = $totalPaid->fetchColumn();
 
+// Fee assignments
+$feeTypes = $db->query("SELECT * FROM fee_types WHERE is_active=1 ORDER BY fee_category, fee_name_bn")->fetchAll();
+$assignStmt = $db->prepare("SELECT sfa.*, ft.fee_name_bn, ft.amount as default_amount, ft.fee_category
+    FROM student_fee_assignments sfa
+    JOIN fee_types ft ON sfa.fee_type_id = ft.id
+    WHERE sfa.student_id=? AND sfa.is_active=1");
+$assignStmt->execute([$id]);
+$feeAssignments = $assignStmt->fetchAll();
+$assignedMap = [];
+foreach ($feeAssignments as $fa) { $assignedMap[$fa['fee_type_id']] = $fa; }
+
+// Save fee assignment
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_fee_assign'])) {
+    $feeTypeId    = (int)$_POST['fee_type_id'];
+    $customAmount = (float)$_POST['custom_amount'];
+    $reason       = trim($_POST['discount_reason'] ?? '');
+    $db->prepare("INSERT INTO student_fee_assignments (student_id, fee_type_id, custom_amount, discount_reason, created_by)
+        VALUES (?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE custom_amount=VALUES(custom_amount), discount_reason=VALUES(discount_reason), is_active=1")
+       ->execute([$id, $feeTypeId, $customAmount, $reason, $_SESSION['user_id']]);
+    setFlash('success', 'ফী নির্ধারণ সংরক্ষিত হয়েছে।');
+    header("Location: view.php?id=$id"); exit;
+}
+
+// Remove fee assignment
+if (isset($_GET['remove_fee']) && in_array($_SESSION['role_slug'], ['super_admin','principal'])) {
+    $db->prepare("UPDATE student_fee_assignments SET is_active=0 WHERE id=? AND student_id=?")
+       ->execute([(int)$_GET['remove_fee'], $id]);
+    setFlash('success', 'ফী নির্ধারণ সরানো হয়েছে।');
+    header("Location: view.php?id=$id"); exit;
+}
+
 require_once '../../includes/header.php';
 ?>
 <div class="section-header">
@@ -246,7 +278,106 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
+<!-- Fee Assignment Section -->
+<?php if (in_array($_SESSION['role_slug'], ['super_admin','principal','accountant'])): ?>
+<div class="card mt-24" style="border:2px solid #e67e22;">
+    <div class="card-header" style="background:#fff8f0;">
+        <span class="card-title" style="color:#e67e22;"><i class="fas fa-tags"></i> ব্যক্তিগত ফী নির্ধারণ</span>
+        <button onclick="openModal('feeAssignModal')" class="btn btn-sm" style="background:#e67e22;color:#fff;">
+            <i class="fas fa-plus"></i> ফী যোগ করুন
+        </button>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <?php if (empty($feeAssignments)): ?>
+        <div style="text-align:center;padding:20px;color:#718096;font-size:13px;">
+            <i class="fas fa-info-circle"></i> কোনো ব্যক্তিগত ফী নির্ধারণ নেই — ডিফল্ট ফী প্রযোজ্য হবে।
+        </div>
+        <?php else: ?>
+        <table>
+            <thead><tr><th>ফীর নাম</th><th>ডিফল্ট</th><th>নির্ধারিত</th><th>পার্থক্য</th><th>কারণ</th><th>অ্যাকশন</th></tr></thead>
+            <tbody>
+            <?php foreach ($feeAssignments as $fa): ?>
+            <tr>
+                <td style="font-weight:600;"><?=e($fa['fee_name_bn'])?></td>
+                <td style="color:#718096;">৳<?=number_format($fa['default_amount'])?></td>
+                <td style="font-weight:700;color:#e67e22;">৳<?=number_format($fa['custom_amount'])?></td>
+                <td>
+                    <?php $diff = $fa['custom_amount'] - $fa['default_amount']; ?>
+                    <span style="color:<?=$diff<0?'#27ae60':'#e74c3c';?>;font-weight:600;">
+                        <?=$diff<0?'(-৳'.number_format(abs($diff)).')':'(+৳'.number_format($diff).')'?>
+                    </span>
+                </td>
+                <td style="font-size:12px;color:#718096;"><?=e($fa['discount_reason']??'—')?></td>
+                <td>
+                    <a href="?id=<?=$id?>&remove_fee=<?=$fa['id']?>" onclick="return confirm('সরিয়ে দেবেন?')" class="btn btn-danger btn-xs">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Fee Assign Modal -->
+<div class="modal-overlay" id="feeAssignModal">
+    <div class="modal-box" style="max-width:480px;">
+        <div class="modal-header">
+            <span style="font-weight:700;"><i class="fas fa-tag"></i> ফী নির্ধারণ — <?=e($student['name_bn']??$student['name'])?></span>
+            <button onclick="closeModal('feeAssignModal')" class="btn btn-outline btn-xs">✕</button>
+        </div>
+        <form method="POST">
+            <input type="hidden" name="save_fee_assign" value="1">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>ফীর ধরন নির্বাচন করুন</label>
+                    <select name="fee_type_id" class="form-control" id="feeTypeSelect" onchange="setDefaultAmount(this)" required>
+                        <option value="">ফী নির্বাচন করুন</option>
+                        <?php
+                        $catLabels = ['monthly'=>'মাসিক','yearly'=>'বার্ষিক','one_time'=>'একবার','optional'=>'ঐচ্ছিক'];
+                        $lastCat = '';
+                        foreach ($feeTypes as $ft):
+                            if ($ft['fee_category'] !== $lastCat) {
+                                if ($lastCat) echo '</optgroup>';
+                                echo '<optgroup label="'.$catLabels[$ft['fee_category']].' ফী">';
+                                $lastCat = $ft['fee_category'];
+                            }
+                        ?>
+                        <option value="<?=$ft['id']?>" data-amount="<?=$ft['amount']?>"
+                            <?=isset($assignedMap[$ft['id']])?'disabled title="ইতোমধ্যে নির্ধারিত"':''?>>
+                            <?=e($ft['fee_name_bn'])?> (ডিফল্ট: ৳<?=number_format($ft['amount'])?>)
+                        </option>
+                        <?php endforeach; if ($lastCat) echo '</optgroup>'; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>নির্ধারিত পরিমাণ (৳)</label>
+                    <input type="number" name="custom_amount" id="customAmount" class="form-control" min="0" step="0.01" required placeholder="পরিমাণ লিখুন">
+                    <small style="color:#718096;font-size:11px;" id="defaultHint"></small>
+                </div>
+                <div class="form-group">
+                    <label>কারণ / মন্তব্য</label>
+                    <input type="text" name="discount_reason" class="form-control" placeholder="যেমন: গরিব ছাত্র, বৃত্তিপ্রাপ্ত...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('feeAssignModal')" class="btn btn-outline">বাতিল</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> সংরক্ষণ</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
+function setDefaultAmount(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const amount = opt.dataset.amount || '';
+    document.getElementById('customAmount').value = amount;
+    document.getElementById('defaultHint').textContent = amount ? 'ডিফল্ট পরিমাণ: ৳' + parseFloat(amount).toLocaleString() : '';
+}
 function printSlip() {
     const slip = document.getElementById('admissionSlip').innerHTML;
     const win = window.open('', '_blank', 'width=500,height=600');
