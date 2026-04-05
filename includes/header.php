@@ -456,6 +456,9 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/fees/due.php" class="nav-item nav-sub">
                     <i class="fas fa-exclamation-circle"></i> বকেয়া ফি
                 </a>
+                <a href="<?= BASE_URL ?>/modules/fees/fee_types.php" class="nav-item nav-sub">
+                    <i class="fas fa-tags"></i> ফী ধরন ম্যানেজ
+                </a>
                 <a href="<?= BASE_URL ?>/modules/fees/report.php" class="nav-item nav-sub">
                     <i class="fas fa-chart-bar"></i> আর্থিক রিপোর্ট
                 </a>
