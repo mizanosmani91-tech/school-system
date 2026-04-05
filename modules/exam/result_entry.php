@@ -14,8 +14,8 @@ $filterExam  = (int)($_GET['exam_id'] ?? 0);
 // Exams for selected class
 $exams = [];
 if ($filterClass) {
-    $exStmt = $db->prepare("SELECT * FROM exams WHERE (class_id=? OR class_id IS NULL) AND academic_year=? ORDER BY FIELD(exam_type,'test','half_yearly','annual'), sequence_no");
-    $exStmt->execute([$filterClass, $filterYear]);
+    $exStmt = $db->prepare("SELECT * FROM exams WHERE academic_year=? ORDER BY FIELD(exam_type,'test','half_yearly','annual','monthly','special'), id");
+    $exStmt->execute([$filterYear]);
     $exams = $exStmt->fetchAll();
 }
 
