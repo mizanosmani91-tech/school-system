@@ -392,7 +392,7 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item nav-sub">
                     <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
                 </a>
-                <a href="<?= BASE_URL ?>/modules/exam/marks.php" class="nav-item nav-sub">
+                <a href="<?= BASE_URL ?>/modules/exam/result_entry.php" class="nav-item nav-sub">
                     <i class="fas fa-pen"></i> মার্ক এন্ট্রি
                 </a>
                 <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item nav-sub">

@@ -310,7 +310,7 @@ if (isset($parentLayout) && $parentLayout) {
         <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item">
             <i class="fas fa-clipboard-check"></i> ছাত্র উপস্থিতি
         </a>
-        <a href="<?= BASE_URL ?>/modules/exam/marks.php" class="nav-item">
+        <a href="<?= BASE_URL ?>/modules/exam/result_entry.php" class="nav-item">
             <i class="fas fa-pen"></i> মার্ক এন্ট্রি
         </a>
         <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item">
@@ -379,7 +379,7 @@ if (isset($parentLayout) && $parentLayout) {
                         <div style="font-weight:700;font-size:14px;"><?= e($currentUser['name_bn'] ?? $currentUser['name'] ?? '') ?></div>
                         <div style="font-size:12px;color:var(--text-muted);"><?= e($currentUser['role_name'] ?? '') ?></div>
                     </div>
-                    <a href="<?= BASE_URL ?>/modules/teacher/profile.php"><i class="fas fa-user-circle"></i> প্রোফাইল</a>
+                    <a href="<?= BASE_URL ?>/profile.php"><i class="fas fa-user-circle"></i> প্রোফাইল</a>
                     <a href="<?= BASE_URL ?>/settings.php"><i class="fas fa-cog"></i> সেটিংস</a>
                     <hr>
                     <a href="<?= BASE_URL ?>/logout.php" style="color:var(--danger);"><i class="fas fa-sign-out-alt"></i> লগআউট</a>
