@@ -72,18 +72,32 @@ require_once '../../includes/header.php';
 <div class="card mb-16">
     <div class="card-header"><span class="card-title"><i class="fas fa-search"></i> ছাত্র খুঁজুন</span></div>
     <div class="card-body" style="padding:14px 20px;">
-        <form method="GET" style="display:flex;gap:10px;">
-            <div class="input-group" style="flex:1;max-width:400px;">
-                <input type="text" name="q" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর দিয়ে খুঁজুন...">
-                <div class="input-group-append">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+            <!-- Class filter -->
+            <div style="flex:1;min-width:160px;">
+                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">শ্রেণী দিয়ে ফিল্টার</label>
+                <select id="classFilter" class="form-control" style="padding:8px;" onchange="loadStudentsByClass(this.value)">
+                    <option value="">সব শ্রেণী</option>
+                    <?php
+                    $classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+                    foreach ($classes as $c):
+                    ?>
+                    <option value="<?=$c['id']?>"><?=e($c['class_name_bn'])?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <!-- Name/ID search -->
+            <div style="flex:2;min-width:200px;">
+                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">নাম বা ID দিয়ে খুঁজুন</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর..." oninput="liveSearch(this.value)">
                     <button type="button" class="btn btn-primary" onclick="searchStudent()"><i class="fas fa-search"></i></button>
                 </div>
             </div>
-            <input type="hidden" name="student_id" id="selectedStudentId">
-        </form>
-        <!-- Auto-complete results -->
-        <div id="searchResults" style="max-width:400px;position:relative;">
-            <div id="searchDropdown" style="display:none;position:absolute;top:0;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-md);z-index:100;max-height:200px;overflow-y:auto;"></div>
+        </div>
+        <!-- Dropdown results -->
+        <div style="position:relative;max-width:620px;">
+            <div id="searchDropdown" style="display:none;position:absolute;top:4px;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:200;max-height:250px;overflow-y:auto;"></div>
         </div>
     </div>
 </div>
@@ -222,22 +236,62 @@ require_once '../../includes/header.php';
 </div>
 
 <script>
+function loadStudentsByClass(classId) {
+    const dd = document.getElementById('searchDropdown');
+    if (!classId) { dd.style.display = 'none'; return; }
+    fetch('<?= BASE_URL ?>/api/search_student.php?class_id=' + classId + '&q=')
+        .then(r => r.json())
+        .then(data => showDropdown(data));
+}
+
+function liveSearch(q) {
+    if (q.length < 2) { document.getElementById('searchDropdown').style.display = 'none'; return; }
+    const classId = document.getElementById('classFilter').value;
+    const url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q) + (classId ? '&class_id=' + classId : '');
+    fetch(url).then(r => r.json()).then(data => showDropdown(data));
+}
+
 function searchStudent() {
     const q = document.getElementById('studentSearch').value;
-    if (q.length < 2) return;
-    fetch('<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(data => {
-            const dd = document.getElementById('searchDropdown');
-            if (!data.length) { dd.style.display = 'none'; return; }
-            dd.innerHTML = data.map(s =>
-                `<div onclick="selectStudent(${s.id},'${s.name_bn||s.name}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;">
-                    <strong>${s.name_bn||s.name}</strong> &mdash; ${s.student_id} &mdash; ${s.class_name_bn||''}
-                </div>`
-            ).join('');
-            dd.style.display = 'block';
-        });
+    const classId = document.getElementById('classFilter').value;
+    const url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q) + (classId ? '&class_id=' + classId : '');
+    fetch(url).then(r => r.json()).then(data => showDropdown(data));
 }
+
+function showDropdown(data) {
+    const dd = document.getElementById('searchDropdown');
+    if (!data.length) {
+        dd.innerHTML = '<div style="padding:12px 14px;color:#718096;font-size:13px;">কোনো ছাত্র পাওয়া যায়নি</div>';
+        dd.style.display = 'block'; return;
+    }
+    dd.innerHTML = data.map(s =>
+        `<div onclick="selectStudent(${s.id},'${(s.name_bn||s.name).replace(/'/g,"\'")}')"
+            style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f4f8;font-size:13px;display:flex;align-items:center;gap:10px;"
+            onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='#fff'">
+            <div style="width:32px;height:32px;background:#1a5276;color:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">
+                ${(s.name_bn||s.name).charAt(0)}
+            </div>
+            <div>
+                <div style="font-weight:600;">${s.name_bn||s.name}</div>
+                <div style="font-size:11px;color:#718096;">${s.student_id} &bull; ${s.class_name_bn||''} &bull; রোল: ${s.roll_number||''}</div>
+            </div>
+        </div>`
+    ).join('');
+    dd.style.display = 'block';
+}
+
+function selectStudent(id, name) {
+    document.getElementById('studentSearch').value = name;
+    document.getElementById('searchDropdown').style.display = 'none';
+    window.location.href = 'collection.php?student_id=' + id;
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#searchDropdown') && !e.target.closest('#studentSearch')) {
+        document.getElementById('searchDropdown').style.display = 'none';
+    }
+});
 
 function setAmount(sel) {
     const opt = sel.selectedOptions[0];
