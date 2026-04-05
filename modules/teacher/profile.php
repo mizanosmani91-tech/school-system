@@ -117,11 +117,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password']) && 
 $month = date('Y-m');
 $presentDays = 0;
 $totalWorkDays = 0;
+$attendanceHistory = [];
+$todayCheckin = null;
 try {
     $attStmt = $db->prepare("SELECT COUNT(*) FROM teacher_attendance WHERE teacher_id=? AND DATE_FORMAT(date,'%Y-%m')=? AND status='present'");
     $attStmt->execute([$teacher['id'], $month]);
     $presentDays = $attStmt->fetchColumn();
     $totalWorkDays = $db->query("SELECT COUNT(DISTINCT date) FROM teacher_attendance WHERE DATE_FORMAT(date,'%Y-%m')='$month'")->fetchColumn() ?: 0;
+    // চেক ইন/আউট ইতিহাস (শেষ ৩০ দিন)
+    $histStmt = $db->prepare("SELECT * FROM teacher_attendance WHERE teacher_id=? ORDER BY date DESC LIMIT 30");
+    $histStmt->execute([$teacher['id']]);
+    $attendanceHistory = $histStmt->fetchAll();
+    // আজকের রেকর্ড
+    $todayStmt = $db->prepare("SELECT * FROM teacher_attendance WHERE teacher_id=? AND date=?");
+    $todayStmt->execute([$teacher['id'], date('Y-m-d')]);
+    $todayCheckin = $todayStmt->fetch();
 } catch (Exception $e) { /* টেবিল নেই */ }
 
 // বেতনের ইতিহাস (শেষ ৬ মাস)
@@ -244,6 +254,35 @@ function copyResetPw() {
             </div>
         </div>
 
+        <!-- আজকের চেক ইন স্ট্যাটাস -->
+        <?php if($todayCheckin): ?>
+        <div class="card mb-16">
+            <div class="card-header"><span class="card-title"><i class="fas fa-fingerprint"></i> আজকের উপস্থিতি</span></div>
+            <div class="card-body">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;">
+                    <div style="background:<?= $todayCheckin['check_in'] ? '#eafaf1' : '#f7fafc' ?>;border-radius:10px;padding:14px;border:2px solid <?= $todayCheckin['check_in'] ? 'var(--success)' : 'var(--border)' ?>;">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">চেক ইন</div>
+                        <div style="font-size:20px;font-weight:700;color:<?= $todayCheckin['check_in'] ? 'var(--success)' : 'var(--text-muted)' ?>;">
+                            <?= $todayCheckin['check_in'] ? date('h:i A', strtotime($todayCheckin['check_in'])) : '--:--' ?>
+                        </div>
+                    </div>
+                    <div style="background:<?= $todayCheckin['check_out'] ? '#fdedec' : '#f7fafc' ?>;border-radius:10px;padding:14px;border:2px solid <?= $todayCheckin['check_out'] ? 'var(--danger)' : 'var(--border)' ?>;">
+                        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">চেক আউট</div>
+                        <div style="font-size:20px;font-weight:700;color:<?= $todayCheckin['check_out'] ? 'var(--danger)' : 'var(--text-muted)' ?>;">
+                            <?= $todayCheckin['check_out'] ? date('h:i A', strtotime($todayCheckin['check_out'])) : '--:--' ?>
+                        </div>
+                    </div>
+                </div>
+                <?php if($todayCheckin['check_in'] && $todayCheckin['check_out']): ?>
+                <?php $d = strtotime($todayCheckin['check_out']) - strtotime($todayCheckin['check_in']); ?>
+                <div style="text-align:center;margin-top:10px;font-size:13px;color:var(--text-muted);">
+                    মোট সময়: <strong><?= toBanglaNumber(floor($d/3600)) ?>ঘ <?= toBanglaNumber(floor(($d%3600)/60)) ?>মি</strong>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <!-- CV ডাউনলোড -->
         <div class="card mb-16">
             <div class="card-body" style="text-align:center;padding:20px;">
@@ -266,6 +305,33 @@ function copyResetPw() {
                             <td style="font-size:13px;"><?= banglaDate($s['payment_date'] ?? '') ?></td>
                             <td style="font-weight:700;color:var(--success);">৳<?= number_format($s['amount'] ?? 0) ?></td>
                             <td><span class="badge badge-success">পরিশোধিত</span></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; ?>
+        <!-- চেক ইন/আউট ইতিহাস -->
+        <?php if(!empty($attendanceHistory)): ?>
+        <div class="card mb-16">
+            <div class="card-header"><span class="card-title"><i class="fas fa-history"></i> উপস্থিতির ইতিহাস</span></div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>তারিখ</th><th>চেক ইন</th><th>চেক আউট</th><th>মোট</th></tr></thead>
+                    <tbody>
+                        <?php foreach($attendanceHistory as $ah):
+                            $totalH = '';
+                            if($ah['check_in'] && $ah['check_out']) {
+                                $d = strtotime($ah['check_out']) - strtotime($ah['check_in']);
+                                $totalH = toBanglaNumber(floor($d/3600)).'ঘ '.toBanglaNumber(floor(($d%3600)/60)).'মি';
+                            }
+                        ?>
+                        <tr>
+                            <td style="font-size:13px;"><?= banglaDate($ah['date']) ?></td>
+                            <td style="color:var(--success);font-weight:600;font-size:13px;"><?= $ah['check_in'] ? date('h:i A',strtotime($ah['check_in'])) : '-' ?></td>
+                            <td style="color:var(--danger);font-size:13px;"><?= $ah['check_out'] ? date('h:i A',strtotime($ah['check_out'])) : '-' ?></td>
+                            <td style="font-size:13px;font-weight:600;"><?= $totalH ?: '-' ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
