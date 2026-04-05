@@ -4,10 +4,6 @@ requireLogin(['super_admin','principal','teacher']);
 $pageTitle = 'পরীক্ষা ও ফলাফল';
 $db = getDB();
 
-$exams = $db->query("SELECT * FROM exams ORDER BY academic_year DESC, start_date")->fetchAll();
-$classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
-$subjects = $db->query("SELECT * FROM subjects WHERE is_active=1")->fetchAll();
-
 // নতুন পরীক্ষা যোগ
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_exam'])) {
     if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF');
@@ -17,81 +13,179 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_exam'])) {
     $year       = (int)($_POST['academic_year'] ?? date('Y'));
     $startDate  = $_POST['start_date'] ?: null;
     $endDate    = $_POST['end_date'] ?: null;
-
     if ($examNameBn) {
-        $db->prepare("INSERT INTO exams (exam_name, exam_name_bn, exam_type, academic_year, start_date, end_date) VALUES (?,?,?,?,?,?)")
+        $db->prepare("INSERT INTO exams (exam_name,exam_name_bn,exam_type,academic_year,start_date,end_date) VALUES (?,?,?,?,?,?)")
            ->execute([$examName ?: $examNameBn, $examNameBn, $examType, $year, $startDate, $endDate]);
-        setFlash('success', 'পরীক্ষা যোগ হয়েছে!');
-    } else {
-        setFlash('danger', 'পরীক্ষার নাম আবশ্যক।');
+        setFlash('success','পরীক্ষা যোগ হয়েছে!');
     }
     header('Location: index.php'); exit;
 }
 
 // পরীক্ষা মুছুন
-if (isset($_GET['delete_exam']) && in_array($_SESSION['role_slug'], ['super_admin','principal'])) {
+if (isset($_GET['delete_exam']) && in_array($_SESSION['role_slug'],['super_admin','principal'])) {
     $db->prepare("DELETE FROM exams WHERE id=?")->execute([(int)$_GET['delete_exam']]);
-    setFlash('success', 'পরীক্ষা মুছে ফেলা হয়েছে।');
+    setFlash('success','পরীক্ষা মুছে ফেলা হয়েছে।');
     header('Location: index.php'); exit;
 }
 
-$examId = (int)($_GET['exam_id'] ?? 0);
-$classId = (int)($_GET['class_id'] ?? 0);
+$exams    = $db->query("SELECT * FROM exams ORDER BY academic_year DESC, start_date")->fetchAll();
+$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$subjects = $db->query("SELECT * FROM subjects WHERE is_active=1")->fetchAll();
+
+$examId    = (int)($_GET['exam_id'] ?? 0);
+$classId   = (int)($_GET['class_id'] ?? 0);
 $subjectId = (int)($_GET['subject_id'] ?? 0);
 
-// Save marks
+// বর্তমান পরীক্ষার তথ্য
+$currentExam = null;
+foreach ($exams as $e) { if ($e['id'] == $examId) { $currentExam = $e; break; } }
+$isModelTest   = $currentExam && in_array($currentExam['exam_type'], ['test','monthly']);
+$isMainExam    = $currentExam && in_array($currentExam['exam_type'], ['half_yearly','annual']);
+
+// মার্ক এন্ট্রি কনফিগ (POST থেকে অথবা session থেকে)
+$markConfig = $_SESSION['mark_config'][$examId][$subjectId] ?? [
+    'has_written' => 1, 'written_full' => $isModelTest ? 20 : 80,
+    'has_oral'    => 0, 'oral_full'    => 0,
+    'has_mcq'     => 0, 'mcq_full'     => 0,
+];
+
+// কনফিগ সেভ
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_config'])) {
+    if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF');
+    $markConfig = [
+        'has_written'  => isset($_POST['has_written']) ? 1 : 0,
+        'written_full' => (int)($_POST['written_full'] ?? 0),
+        'has_oral'     => isset($_POST['has_oral']) ? 1 : 0,
+        'oral_full'    => (int)($_POST['oral_full'] ?? 0),
+        'has_mcq'      => isset($_POST['has_mcq']) ? 1 : 0,
+        'mcq_full'     => (int)($_POST['mcq_full'] ?? 0),
+    ];
+    $_SESSION['mark_config'][$examId][$subjectId] = $markConfig;
+    header("Location: index.php?exam_id=$examId&class_id=$classId&subject_id=$subjectId"); exit;
+}
+
+// মার্ক সেভ
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_marks'])) {
     if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF');
-    $postExamId = (int)$_POST['exam_id'];
+    $postExamId    = (int)$_POST['exam_id'];
     $postSubjectId = (int)$_POST['subject_id'];
-    $marks = $_POST['marks'] ?? [];
-    $absents = $_POST['absent'] ?? [];
+    $marks         = $_POST['marks'] ?? [];
+    $absents       = $_POST['absent'] ?? [];
+    $cfg           = $_SESSION['mark_config'][$postExamId][$postSubjectId] ?? $markConfig;
+
+    $fullMarks = ($cfg['written_full'] ?? 0) + ($cfg['oral_full'] ?? 0) + ($cfg['mcq_full'] ?? 0);
+    if ($isModelTest) $fullMarks = 20;
 
     $db->beginTransaction();
     try {
         foreach ($marks as $studentId => $m) {
-            $written = (float)($m['written'] ?? 0);
-            $mcq = (float)($m['mcq'] ?? 0);
-            $practical = (float)($m['practical'] ?? 0);
-            $total = $written + $mcq + $practical;
+            $written  = (float)($m['written'] ?? 0);
+            $oral     = (float)($m['oral'] ?? 0);
+            $mcq      = (float)($m['mcq'] ?? 0);
             $isAbsent = isset($absents[$studentId]) ? 1 : 0;
 
-            // Get subject full marks
-            $fullMarks = 100;
-            foreach ($subjects as $s) { if ($s['id'] == $postSubjectId) { $fullMarks = $s['full_marks']; break; } }
-            $gradeInfo = $isAbsent ? ['grade'=>'AB','point'=>0] : calculateGrade($total, $fullMarks);
+            if ($isModelTest) {
+                // মডেল টেস্ট — আলাদা টেবিলে
+                $total = $written + $oral + $mcq;
+                $db->prepare("INSERT INTO model_test_marks
+                    (exam_id,student_id,subject_id,written_marks,oral_marks,total_marks,entered_by)
+                    VALUES (?,?,?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE written_marks=VALUES(written_marks),
+                    oral_marks=VALUES(oral_marks),total_marks=VALUES(total_marks),entered_by=VALUES(entered_by)")
+                   ->execute([$postExamId,$studentId,$postSubjectId,$written,$oral,$total,$_SESSION['user_id']]);
+            } else {
+                // মেইন পরীক্ষা — মডেল টেস্টের গড় অটো যোগ
+                $modelAvg = 0;
+                if ($isMainExam) {
+                    // এই পরীক্ষার জন্য কোন মডেল টেস্টগুলো?
+                    $examYear  = $currentExam['academic_year'] ?? date('Y');
+                    $modelType = $currentExam['exam_type'] === 'half_yearly' ? ['test','monthly'] : ['test','monthly'];
+                    // অর্ধ-বার্ষিকের জন্য ১ম ও ২য়, বার্ষিকের জন্য ৩য় ও ৪র্থ
+                    // exam_id কম মানে আগের — অর্ধ-বার্ষিকের আগে ২টা, বার্ষিকের আগে ২টা
+                    $modelExams = $db->prepare("SELECT id FROM exams WHERE exam_type IN ('test','monthly') AND academic_year=? AND id < ? ORDER BY id DESC LIMIT 2");
+                    $modelExams->execute([$examYear, $postExamId]);
+                    $modelExamIds = array_column($modelExams->fetchAll(), 'id');
 
-            $stmt = $db->prepare("INSERT INTO exam_marks
-                (exam_id, student_id, subject_id, written_marks, mcq_marks, practical_marks, total_marks, grade, grade_point, is_absent, entered_by)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
-                ON DUPLICATE KEY UPDATE written_marks=VALUES(written_marks), mcq_marks=VALUES(mcq_marks),
-                practical_marks=VALUES(practical_marks), total_marks=VALUES(total_marks),
-                grade=VALUES(grade), grade_point=VALUES(grade_point), is_absent=VALUES(is_absent), entered_by=VALUES(entered_by)");
-            $stmt->execute([$postExamId,$studentId,$postSubjectId,$written,$mcq,$practical,$total,
-                $gradeInfo['grade'],$gradeInfo['point'],$isAbsent,$_SESSION['user_id']]);
+                    if (!empty($modelExamIds)) {
+                        $placeholders = implode(',', array_fill(0, count($modelExamIds), '?'));
+                        $modelMarks = $db->prepare("SELECT AVG(total_marks) as avg FROM model_test_marks WHERE student_id=? AND subject_id=? AND exam_id IN ($placeholders)");
+                        $modelMarks->execute(array_merge([$studentId, $postSubjectId], $modelExamIds));
+                        $modelAvg = round((float)($modelMarks->fetchColumn() ?? 0), 2);
+                    }
+                }
+
+                $total     = $written + $oral + $mcq;
+                $grandTotal= $total + $modelAvg;
+                $gradeInfo = $isAbsent ? ['grade'=>'AB','point'=>0] : calculateGrade($grandTotal, 100);
+
+                $db->prepare("INSERT INTO exam_marks
+                    (exam_id,student_id,subject_id,written_marks,mcq_marks,practical_marks,total_marks,grade,grade_point,is_absent,entered_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE written_marks=VALUES(written_marks),mcq_marks=VALUES(mcq_marks),
+                    practical_marks=VALUES(practical_marks),total_marks=VALUES(total_marks),
+                    grade=VALUES(grade),grade_point=VALUES(grade_point),is_absent=VALUES(is_absent),entered_by=VALUES(entered_by)")
+                   ->execute([$postExamId,$studentId,$postSubjectId,$written,$mcq,$oral,$grandTotal,
+                       $gradeInfo['grade'],$gradeInfo['point'],$isAbsent,$_SESSION['user_id']]);
+            }
         }
+
+        // মডেল টেস্টে র‍্যাংক আপডেট
+        if ($isModelTest) {
+            $ranked = $db->prepare("SELECT id FROM model_test_marks WHERE exam_id=? AND subject_id=? ORDER BY total_marks DESC");
+            $ranked->execute([$postExamId, $postSubjectId]);
+            $rank = 1;
+            foreach ($ranked->fetchAll() as $r) {
+                $db->prepare("UPDATE model_test_marks SET rank_position=? WHERE id=?")->execute([$rank++, $r['id']]);
+            }
+        }
+
         $db->commit();
-        setFlash('success', 'নম্বর সফলভাবে সংরক্ষিত হয়েছে।');
-    } catch (Exception $e) {
+        setFlash('success','নম্বর সফলভাবে সংরক্ষিত হয়েছে।');
+    } catch (Exception $ex) {
         $db->rollBack();
-        setFlash('danger', 'ত্রুটি: ' . $e->getMessage());
+        setFlash('danger','ত্রুটি: '.$ex->getMessage());
     }
-    header("Location: index.php?exam_id=$postExamId&class_id=$classId&subject_id=$postSubjectId");
-    exit;
+    header("Location: index.php?exam_id=$postExamId&class_id=$classId&subject_id=$postSubjectId"); exit;
 }
 
-// Load students
-$students = [];
+// ছাত্র ও বিদ্যমান নম্বর লোড
+$students      = [];
 $existingMarks = [];
+$modelTestAvgs = [];
 if ($examId && $classId && $subjectId) {
     $stmt = $db->prepare("SELECT * FROM students WHERE class_id=? AND status='active' ORDER BY roll_number");
     $stmt->execute([$classId]);
     $students = $stmt->fetchAll();
 
-    $stmt2 = $db->prepare("SELECT * FROM exam_marks WHERE exam_id=? AND subject_id=?");
-    $stmt2->execute([$examId, $subjectId]);
-    foreach ($stmt2->fetchAll() as $m) $existingMarks[$m['student_id']] = $m;
+    if ($isModelTest) {
+        $stmt2 = $db->prepare("SELECT * FROM model_test_marks WHERE exam_id=? AND subject_id=?");
+        $stmt2->execute([$examId, $subjectId]);
+        foreach ($stmt2->fetchAll() as $m) $existingMarks[$m['student_id']] = $m;
+    } else {
+        $stmt2 = $db->prepare("SELECT * FROM exam_marks WHERE exam_id=? AND subject_id=?");
+        $stmt2->execute([$examId, $subjectId]);
+        foreach ($stmt2->fetchAll() as $m) $existingMarks[$m['student_id']] = $m;
+
+        // মডেল টেস্টের গড়
+        if ($isMainExam && $currentExam) {
+            $examYear  = $currentExam['academic_year'] ?? date('Y');
+            $modelExams = $db->prepare("SELECT id FROM exams WHERE exam_type IN ('test','monthly') AND academic_year=? AND id < ? ORDER BY id DESC LIMIT 2");
+            $modelExams->execute([$examYear, $examId]);
+            $modelExamIds = array_column($modelExams->fetchAll(), 'id');
+            if (!empty($modelExamIds)) {
+                $placeholders = implode(',', array_fill(0, count($modelExamIds), '?'));
+                foreach ($students as $s) {
+                    $q = $db->prepare("SELECT AVG(total_marks) as avg FROM model_test_marks WHERE student_id=? AND subject_id=? AND exam_id IN ($placeholders)");
+                    $q->execute(array_merge([$s['id'], $subjectId], $modelExamIds));
+                    $modelTestAvgs[$s['id']] = round((float)($q->fetchColumn() ?? 0), 2);
+                }
+            }
+        }
+    }
 }
+
+$currentSubject = null;
+foreach ($subjects as $s) { if ($s['id'] == $subjectId) { $currentSubject = $s; break; } }
 
 require_once '../../includes/header.php';
 ?>
@@ -143,85 +237,124 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<?php if ($examId && $classId && $subjectId && !empty($students)):
-    $currentSubject = null;
-    foreach ($subjects as $s) { if ($s['id'] == $subjectId) { $currentSubject = $s; break; } }
-?>
+<?php if ($examId && $classId && $subjectId && !empty($students)): ?>
 
+<!-- নম্বরের অংশ কনফিগারেশন -->
+<div class="card mb-16" style="border-left:4px solid var(--primary);">
+    <div class="card-header" style="background:#ebf5fb;">
+        <span class="card-title"><i class="fas fa-sliders-h"></i>
+            <?= $isModelTest ? 'মডেল টেস্ট' : 'মেইন পরীক্ষা' ?> —
+            <?= e($currentSubject['subject_name_bn'] ?? '') ?> — নম্বর বিভাজন সেট করুন
+        </span>
+    </div>
+    <div class="card-body">
+        <form method="POST" style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+            <input type="hidden" name="csrf" value="<?= getCsrfToken() ?>">
+            <input type="hidden" name="save_config" value="1">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                <input type="checkbox" name="has_written" <?= $markConfig['has_written'] ? 'checked' : '' ?>>
+                লিখিত
+                <input type="number" name="written_full" class="form-control" style="width:65px;padding:5px;"
+                    value="<?= $markConfig['written_full'] ?>" min="0" max="<?= $isModelTest ? 20 : 80 ?>"> নম্বর
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                <input type="checkbox" name="has_oral" <?= $markConfig['has_oral'] ? 'checked' : '' ?>>
+                মৌখিক
+                <input type="number" name="oral_full" class="form-control" style="width:65px;padding:5px;"
+                    value="<?= $markConfig['oral_full'] ?>" min="0" max="<?= $isModelTest ? 20 : 80 ?>"> নম্বর
+            </label>
+            <?php if (!$isModelTest): ?>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                <input type="checkbox" name="has_mcq" <?= $markConfig['has_mcq'] ? 'checked' : '' ?>>
+                MCQ
+                <input type="number" name="mcq_full" class="form-control" style="width:65px;padding:5px;"
+                    value="<?= $markConfig['mcq_full'] ?>" min="0" max="80"> নম্বর
+            </label>
+            <?php endif; ?>
+            <?php if ($isMainExam): ?>
+            <div style="background:#eafaf1;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;color:var(--success);">
+                <i class="fas fa-plus-circle"></i> মডেল টেস্ট গড় = ২০ (অটো)
+            </div>
+            <?php endif; ?>
+            <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-check"></i> সেট করুন</button>
+        </form>
+    </div>
+</div>
+
+<!-- নম্বর এন্ট্রি টেবিল -->
 <form method="POST">
     <input type="hidden" name="csrf" value="<?= getCsrfToken() ?>">
     <input type="hidden" name="save_marks" value="1">
     <input type="hidden" name="exam_id" value="<?= $examId ?>">
     <input type="hidden" name="subject_id" value="<?= $subjectId ?>">
-
 <div class="card">
     <div class="card-header">
         <span class="card-title">
-            নম্বর এন্ট্রি &mdash; <?= e($currentSubject['subject_name_bn'] ?? '') ?>
-            (পূর্ণমান: <?= toBanglaNumber($currentSubject['full_marks'] ?? 100) ?>, পাস: <?= toBanglaNumber($currentSubject['pass_marks'] ?? 33) ?>)
+            নম্বর এন্ট্রি — <?= e($currentSubject['subject_name_bn'] ?? '') ?>
+            <?php if ($isModelTest): ?>
+                <span class="badge badge-warning" style="margin-left:8px;">মডেল টেস্ট — পূর্ণমান: ২০</span>
+            <?php else: ?>
+                <span class="badge badge-primary" style="margin-left:8px;">পূর্ণমান: ১০০</span>
+            <?php endif; ?>
         </span>
     </div>
     <div class="table-wrap">
         <table>
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>ছাত্রের নাম</th>
-                    <th>রোল</th>
-                    <th>লিখিত</th>
-                    <th>MCQ</th>
-                    <th>ব্যবহারিক</th>
+                    <th>#</th><th>ছাত্রের নাম</th><th>রোল</th>
+                    <?php if ($markConfig['has_written']): ?><th>লিখিত /<?= $markConfig['written_full'] ?></th><?php endif; ?>
+                    <?php if ($markConfig['has_oral']): ?><th>মৌখিক /<?= $markConfig['oral_full'] ?></th><?php endif; ?>
+                    <?php if (!$isModelTest && $markConfig['has_mcq']): ?><th>MCQ /<?= $markConfig['mcq_full'] ?></th><?php endif; ?>
+                    <?php if ($isMainExam): ?><th>মডেল গড়</th><?php endif; ?>
                     <th>মোট</th>
-                    <th>গ্রেড</th>
-                    <th>অনুপস্থিত</th>
+                    <?php if ($isModelTest): ?><th>র‍্যাংক</th><?php else: ?><th>গ্রেড</th><th>অনুপস্থিত</th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($students as $i => $s):
                     $m = $existingMarks[$s['id']] ?? [];
+                    $modelAvg = $modelTestAvgs[$s['id']] ?? 0;
                 ?>
-                <tr id="markRow<?= $s['id'] ?>">
+                <tr id="row<?= $s['id'] ?>">
                     <td style="font-size:12px;color:var(--text-muted);"><?= toBanglaNumber($i+1) ?></td>
-                    <td>
-                        <div style="font-weight:600;font-size:13px;"><?= e($s['name_bn'] ?? $s['name']) ?></div>
-                    </td>
+                    <td style="font-weight:600;font-size:13px;"><?= e($s['name_bn'] ?? $s['name']) ?></td>
                     <td><?= toBanglaNumber($s['roll_number']) ?></td>
-                    <td>
-                        <input type="number" name="marks[<?= $s['id'] ?>][written]"
-                            class="form-control mark-input" style="width:70px;padding:5px;"
-                            value="<?= e($m['written_marks'] ?? '') ?>"
-                            min="0" max="<?= $currentSubject['full_marks'] ?>" step="0.5"
-                            onchange="calcRowTotal(<?= $s['id'] ?>)">
-                    </td>
-                    <td>
-                        <input type="number" name="marks[<?= $s['id'] ?>][mcq]"
-                            class="form-control mark-input" style="width:70px;padding:5px;"
-                            value="<?= e($m['mcq_marks'] ?? '') ?>"
-                            min="0" max="<?= $currentSubject['full_marks'] ?>" step="0.5"
-                            onchange="calcRowTotal(<?= $s['id'] ?>)">
-                    </td>
-                    <td>
-                        <input type="number" name="marks[<?= $s['id'] ?>][practical]"
-                            class="form-control mark-input" style="width:70px;padding:5px;"
-                            value="<?= e($m['practical_marks'] ?? '') ?>"
-                            min="0" max="<?= $currentSubject['full_marks'] ?>" step="0.5"
-                            onchange="calcRowTotal(<?= $s['id'] ?>)">
-                    </td>
-                    <td>
-                        <span id="total<?= $s['id'] ?>" style="font-weight:700;font-size:14px;color:var(--primary);">
-                            <?= e($m['total_marks'] ?? 0) ?>
-                        </span>
-                    </td>
-                    <td>
-                        <span id="grade<?= $s['id'] ?>" class="badge <?= isset($m['grade']) && $m['grade'] === 'F' ? 'badge-danger' : 'badge-success' ?>">
-                            <?= e($m['grade'] ?? '-') ?>
-                        </span>
-                    </td>
-                    <td>
-                        <input type="checkbox" name="absent[<?= $s['id'] ?>]" value="1"
-                            <?= ($m['is_absent'] ?? 0) ? 'checked' : '' ?>
-                            onchange="toggleAbsent(<?= $s['id'] ?>, this)">
-                    </td>
+                    <?php if ($markConfig['has_written']): ?>
+                    <td><input type="number" name="marks[<?= $s['id'] ?>][written]" class="form-control mark-input"
+                        style="width:70px;padding:5px;" value="<?= e($m['written_marks'] ?? '') ?>"
+                        min="0" max="<?= $markConfig['written_full'] ?>" step="0.5"
+                        onchange="calcTotal(<?= $s['id'] ?>,<?= $modelAvg ?>)"></td>
+                    <?php endif; ?>
+                    <?php if ($markConfig['has_oral']): ?>
+                    <td><input type="number" name="marks[<?= $s['id'] ?>][oral]" class="form-control mark-input"
+                        style="width:70px;padding:5px;" value="<?= e($m['oral_marks'] ?? $m['practical_marks'] ?? '') ?>"
+                        min="0" max="<?= $markConfig['oral_full'] ?>" step="0.5"
+                        onchange="calcTotal(<?= $s['id'] ?>,<?= $modelAvg ?>)"></td>
+                    <?php endif; ?>
+                    <?php if (!$isModelTest && $markConfig['has_mcq']): ?>
+                    <td><input type="number" name="marks[<?= $s['id'] ?>][mcq]" class="form-control mark-input"
+                        style="width:70px;padding:5px;" value="<?= e($m['mcq_marks'] ?? '') ?>"
+                        min="0" max="<?= $markConfig['mcq_full'] ?>" step="0.5"
+                        onchange="calcTotal(<?= $s['id'] ?>,<?= $modelAvg ?>)"></td>
+                    <?php endif; ?>
+                    <?php if ($isMainExam): ?>
+                    <td style="font-weight:600;color:var(--success);"><?= $modelAvg ?></td>
+                    <?php endif; ?>
+                    <td><span id="total<?= $s['id'] ?>" style="font-weight:700;font-size:14px;color:var(--primary);">
+                        <?= $isModelTest ? ($m['total_marks'] ?? 0) : ($m['total_marks'] ?? $modelAvg) ?>
+                    </span></td>
+                    <?php if ($isModelTest): ?>
+                    <td><span style="font-weight:700;color:var(--accent);">
+                        <?= $m['rank_position'] ? toBanglaNumber($m['rank_position']).'ম' : '-' ?>
+                    </span></td>
+                    <?php else: ?>
+                    <td><span id="grade<?= $s['id'] ?>" class="badge badge-<?= isset($m['grade'])&&$m['grade']==='F'?'danger':'success' ?>">
+                        <?= e($m['grade'] ?? '-') ?>
+                    </span></td>
+                    <td><input type="checkbox" name="absent[<?= $s['id'] ?>]" value="1"
+                        <?= ($m['is_absent']??0)?'checked':'' ?> onchange="toggleAbsent(<?= $s['id'] ?>,this)"></td>
+                    <?php endif; ?>
                 </tr>
                 <?php endforeach; ?>
             </tbody>
@@ -234,50 +367,47 @@ require_once '../../includes/header.php';
 </form>
 
 <script>
-const fullMarks = <?= $currentSubject['full_marks'] ?? 100 ?>;
-const passMarks = <?= $currentSubject['pass_marks'] ?? 33 ?>;
-
-function calcRowTotal(id) {
-    const row = document.getElementById('markRow' + id);
-    const inputs = row.querySelectorAll('.mark-input');
+const isModelTest = <?= $isModelTest ? 'true' : 'false' ?>;
+function calcTotal(id, modelAvg) {
+    const row = document.getElementById('row' + id);
     let total = 0;
-    inputs.forEach(i => total += parseFloat(i.value) || 0);
-    document.getElementById('total' + id).textContent = total;
-
-    let grade, color;
-    const p = (total / fullMarks) * 100;
-    if (p >= 80) { grade='A+'; color='badge-success'; }
-    else if (p >= 70) { grade='A'; color='badge-success'; }
-    else if (p >= 60) { grade='A-'; color='badge-success'; }
-    else if (p >= 50) { grade='B'; color='badge-info'; }
-    else if (p >= 40) { grade='C'; color='badge-info'; }
-    else if (p >= 33) { grade='D'; color='badge-warning'; }
-    else { grade='F'; color='badge-danger'; }
-
-    const gradeEl = document.getElementById('grade' + id);
-    gradeEl.textContent = grade;
-    gradeEl.className = 'badge ' + color;
+    row.querySelectorAll('.mark-input').forEach(i => total += parseFloat(i.value)||0);
+    if (!isModelTest) total += modelAvg;
+    document.getElementById('total'+id).textContent = total % 1 === 0 ? total : total.toFixed(1);
+    if (!isModelTest) {
+        const p = total;
+        let grade, color;
+        if (p>=80){grade='A+';color='badge-success';}
+        else if(p>=70){grade='A';color='badge-success';}
+        else if(p>=60){grade='A-';color='badge-success';}
+        else if(p>=50){grade='B';color='badge-info';}
+        else if(p>=40){grade='C';color='badge-info';}
+        else if(p>=33){grade='D';color='badge-warning';}
+        else{grade='F';color='badge-danger';}
+        const g=document.getElementById('grade'+id);
+        if(g){g.textContent=grade;g.className='badge '+color;}
+    }
 }
-
-function toggleAbsent(id, cb) {
-    const row = document.getElementById('markRow' + id);
-    row.querySelectorAll('.mark-input').forEach(i => { i.disabled = cb.checked; });
-    if (cb.checked) {
-        document.getElementById('total' + id).textContent = 'AB';
-        document.getElementById('grade' + id).textContent = 'AB';
-        document.getElementById('grade' + id).className = 'badge badge-secondary';
-    } else {
-        calcRowTotal(id);
+function toggleAbsent(id,cb){
+    const row=document.getElementById('row'+id);
+    row.querySelectorAll('.mark-input').forEach(i=>i.disabled=cb.checked);
+    if(cb.checked){
+        document.getElementById('total'+id).textContent='AB';
+        const g=document.getElementById('grade'+id);
+        if(g){g.textContent='AB';g.className='badge badge-secondary';}
     }
 }
 </script>
 
+<?php elseif ($examId && $classId && $subjectId && empty($students)): ?>
+<div class="card"><div class="card-body" style="text-align:center;padding:30px;color:var(--text-muted);">এই শ্রেণীতে কোনো সক্রিয় ছাত্র নেই।</div></div>
 <?php elseif (!$examId || !$classId || !$subjectId): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--text-muted);">
-    <i class="fas fa-arrow-up" style="font-size:36px;margin-bottom:12px;"></i>
-    <p>উপরে পরীক্ষা, শ্রেণী ও বিষয় নির্বাচন করুন</p>
+    <i class="fas fa-arrow-up" style="font-size:36px;margin-bottom:12px;display:block;"></i>
+    উপরে পরীক্ষা, শ্রেণী ও বিষয় নির্বাচন করুন
 </div></div>
 <?php endif; ?>
+
 
 <!-- পরীক্ষার তালিকা -->
 <?php if(!empty($exams)): ?>
