@@ -71,6 +71,7 @@ require_once '../../includes/header.php';
 <div class="section-header">
     <h2 class="section-title"><i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল</h2>
     <div style="display:flex;gap:8px;">
+        <button onclick="openModal('addExamModal')" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> নতুন পরীক্ষা</button>
         <a href="result.php" class="btn btn-success btn-sm"><i class="fas fa-trophy"></i> ফলাফল দেখুন</a>
         <a href="subjects.php" class="btn btn-outline btn-sm"><i class="fas fa-book"></i> বিষয়সমূহ</a>
     </div>
@@ -250,5 +251,93 @@ function toggleAbsent(id, cb) {
     <p>উপরে পরীক্ষা, শ্রেণী ও বিষয় নির্বাচন করুন</p>
 </div></div>
 <?php endif; ?>
+
+<!-- পরীক্ষার তালিকা -->
+<?php if(!empty($exams)): ?>
+<div class="card mb-16">
+    <div class="card-header">
+        <span class="card-title"><i class="fas fa-list"></i> <?= toBanglaNumber(date('Y')) ?> সালের পরীক্ষাসমূহ</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>পরীক্ষার নাম</th><th>ধরন</th><th>শুরু</th><th>শেষ</th><th class="no-print">অ্যাকশন</th></tr></thead>
+            <tbody>
+                <?php foreach($exams as $e):
+                    $typeLabel = ['monthly'=>'মাসিক','half_yearly'=>'অর্ধবার্ষিক','annual'=>'বার্ষিক','test'=>'টেস্ট','special'=>'বিশেষ'][$e['exam_type']] ?? $e['exam_type'];
+                ?>
+                <tr>
+                    <td style="font-weight:600;"><?= e($e['exam_name_bn'] ?: $e['exam_name']) ?></td>
+                    <td><span class="badge badge-info" style="font-size:11px;"><?= $typeLabel ?></span></td>
+                    <td style="font-size:13px;"><?= $e['start_date'] ? banglaDate($e['start_date']) : '-' ?></td>
+                    <td style="font-size:13px;"><?= $e['end_date'] ? banglaDate($e['end_date']) : '-' ?></td>
+                    <td class="no-print" style="display:flex;gap:6px;">
+                        <a href="?exam_id=<?= $e['id'] ?>" class="btn btn-primary btn-xs"><i class="fas fa-pen"></i> নম্বর দিন</a>
+                        <?php if(in_array($_SESSION['role_slug'],['super_admin','principal'])): ?>
+                        <a href="?delete_exam=<?= $e['id'] ?>" onclick="return confirm('মুছবেন?')" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i></a>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- নতুন পরীক্ষা Modal -->
+<div class="modal-overlay" id="addExamModal">
+    <div class="modal-box" style="max-width:500px;">
+        <div class="modal-header">
+            <span style="font-weight:700;"><i class="fas fa-plus"></i> নতুন পরীক্ষা যোগ করুন</span>
+            <button onclick="closeModal('addExamModal')" class="btn btn-outline btn-xs">✕</button>
+        </div>
+        <form method="POST">
+            <input type="hidden" name="csrf" value="<?= getCsrfToken() ?>">
+            <input type="hidden" name="add_exam" value="1">
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>পরীক্ষার নাম (বাংলায়) *</label>
+                        <input type="text" name="exam_name_bn" class="form-control" placeholder="যেমন: প্রথম সাময়িক পরীক্ষা" required>
+                    </div>
+                    <div class="form-group">
+                        <label>পরীক্ষার নাম (ইংরেজি) *</label>
+                        <input type="text" name="exam_name" class="form-control" placeholder="e.g. First Term Exam" required>
+                    </div>
+                    <div class="form-group">
+                        <label>পরীক্ষার ধরন</label>
+                        <select name="exam_type" class="form-control">
+                            <option value="test">টেস্ট</option>
+                            <option value="monthly">মাসিক</option>
+                            <option value="half_yearly">অর্ধবার্ষিক</option>
+                            <option value="annual">বার্ষিক</option>
+                            <option value="special">বিশেষ</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>শিক্ষাবর্ষ</label>
+                        <select name="academic_year" class="form-control">
+                            <?php foreach([date('Y'), date('Y')-1, date('Y')+1] as $y): ?>
+                            <option value="<?= $y ?>" <?= $y == date('Y') ? 'selected' : '' ?>><?= $y ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>শুরুর তারিখ</label>
+                        <input type="date" name="start_date" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>শেষের তারিখ</label>
+                        <input type="date" name="end_date" class="form-control">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('addExamModal')" class="btn btn-outline">বাতিল</button>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> যোগ করুন</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <?php require_once '../../includes/footer.php'; ?>
