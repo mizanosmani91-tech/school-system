@@ -525,6 +525,46 @@ if (isset($parentLayout) && $parentLayout) {
     </div>
 </nav>
 
+<script>
+function toggleGroup(id) {
+    const items = document.getElementById('group-' + id);
+    const arrow = document.getElementById('arrow-' + id);
+    if (!items) return;
+    const isOpen = items.classList.contains('open');
+    items.classList.toggle('open', !isOpen);
+    if (arrow) arrow.classList.toggle('open', !isOpen);
+    try { localStorage.setItem('nav_' + id, !isOpen ? '1' : '0'); } catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const groups = ['students','teachers','academic','classmanage','attendance','finance','comms','system'];
+    const currentPath = window.location.pathname;
+    groups.forEach(id => {
+        const items = document.getElementById('group-' + id);
+        const arrow = document.getElementById('arrow-' + id);
+        if (!items) return;
+        // active link চেক
+        let hasActive = false;
+        items.querySelectorAll('a').forEach(a => {
+            try {
+                const aPath = new URL(a.href).pathname;
+                if (currentPath === aPath || currentPath.startsWith(aPath.replace('/index.php','')+'/')) {
+                    a.classList.add('active');
+                    hasActive = true;
+                }
+            } catch(e){}
+        });
+        // localStorage বা active
+        let saved = '0';
+        try { saved = localStorage.getItem('nav_' + id) || '0'; } catch(e){}
+        if (hasActive || saved === '1') {
+            items.classList.add('open');
+            if (arrow) arrow.classList.add('open');
+        }
+    });
+});
+</script>
+
 <!-- MAIN WRAPPER -->
 <div class="main-wrapper">
     <header class="topbar">
