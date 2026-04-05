@@ -8,6 +8,33 @@ $exams = $db->query("SELECT * FROM exams ORDER BY academic_year DESC, start_date
 $classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
 $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1")->fetchAll();
 
+// নতুন পরীক্ষা যোগ
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_exam'])) {
+    if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF');
+    $examNameBn = trim($_POST['exam_name_bn'] ?? '');
+    $examName   = trim($_POST['exam_name'] ?? '');
+    $examType   = $_POST['exam_type'] ?? 'test';
+    $year       = (int)($_POST['academic_year'] ?? date('Y'));
+    $startDate  = $_POST['start_date'] ?: null;
+    $endDate    = $_POST['end_date'] ?: null;
+
+    if ($examNameBn) {
+        $db->prepare("INSERT INTO exams (exam_name, exam_name_bn, exam_type, academic_year, start_date, end_date) VALUES (?,?,?,?,?,?)")
+           ->execute([$examName ?: $examNameBn, $examNameBn, $examType, $year, $startDate, $endDate]);
+        setFlash('success', 'পরীক্ষা যোগ হয়েছে!');
+    } else {
+        setFlash('danger', 'পরীক্ষার নাম আবশ্যক।');
+    }
+    header('Location: index.php'); exit;
+}
+
+// পরীক্ষা মুছুন
+if (isset($_GET['delete_exam']) && in_array($_SESSION['role_slug'], ['super_admin','principal'])) {
+    $db->prepare("DELETE FROM exams WHERE id=?")->execute([(int)$_GET['delete_exam']]);
+    setFlash('success', 'পরীক্ষা মুছে ফেলা হয়েছে।');
+    header('Location: index.php'); exit;
+}
+
 $examId = (int)($_GET['exam_id'] ?? 0);
 $classId = (int)($_GET['class_id'] ?? 0);
 $subjectId = (int)($_GET['subject_id'] ?? 0);
