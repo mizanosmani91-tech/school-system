@@ -69,6 +69,34 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .nav-badge { margin-left: auto; background: var(--accent);
     color: #fff; border-radius: 20px; padding: 1px 7px; font-size: 10px; font-weight: 700; }
 
+/* ===== COLLAPSIBLE NAV GROUPS ===== */
+.nav-group { border-bottom: 1px solid rgba(255,255,255,.04); }
+.nav-group-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 18px; color: var(--sidebar-text);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all .2s; user-select: none;
+}
+.nav-group-header:hover { color: #fff; background: rgba(255,255,255,.04); }
+.nav-group-header span { display: flex; align-items: center; gap: 10px; }
+.nav-group-header span i { width: 20px; text-align: center; font-size: 14px; color: var(--accent-light); }
+.nav-arrow { font-size: 11px; opacity: .5; transition: transform .25s; }
+.nav-arrow.open { transform: rotate(180deg); }
+.nav-group-items { display: none; background: rgba(0,0,0,.15); }
+.nav-group-items.open { display: block; }
+.nav-item.nav-sub {
+    padding: 9px 18px 9px 44px;
+    font-size: 13px;
+    border-left: 2px solid transparent;
+}
+.nav-item.nav-sub:hover, .nav-item.nav-sub.active {
+    border-left-color: var(--accent);
+    border-right: none;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+}
+.nav-item.nav-sub i { font-size: 13px; opacity: .7; }
+
 /* ========== MAIN CONTENT ========== */
 .main-wrapper { margin-left: 260px; min-height: 100vh; display: flex; flex-direction: column; }
 .topbar {
@@ -301,94 +329,187 @@ if (isset($parentLayout) && $parentLayout) {
         </div>
     </div>
     <nav class="sidebar-nav">
-        <span class="nav-section">প্রধান মেনু</span>
-        <a href="<?= BASE_URL ?>/index.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'index.php' ? 'active' : '') ?>">
+
+        <!-- ড্যাশবোর্ড -->
+        <a href="<?= BASE_URL ?>/index.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'index.php' && strpos($_SERVER['PHP_SELF'], 'modules') === false ? 'active' : '') ?>">
             <i class="fas fa-chart-line"></i> ড্যাশবোর্ড
         </a>
 
         <?php if (in_array($roleSlug, ['super_admin','principal','teacher','accountant'])): ?>
-        <span class="nav-section">একাডেমিক</span>
-        <a href="<?= BASE_URL ?>/modules/student/list.php" class="nav-item">
-            <i class="fas fa-user-graduate"></i> ছাত্র তালিকা
-        </a>
-        <a href="<?= BASE_URL ?>/modules/student/admission.php" class="nav-item">
-            <i class="fas fa-user-plus"></i> ভর্তি
-        </a>
-        <a href="<?= BASE_URL ?>/modules/teacher/list.php" class="nav-item">
-            <i class="fas fa-chalkboard-teacher"></i> শিক্ষক
-        </a>
-        <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item">
-            <i class="fas fa-clipboard-check"></i> উপস্থিতি
-        </a>
-        <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item">
-            <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
-        </a>
-        <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item">
-            <i class="fas fa-question-circle"></i> মডেল টেস্ট / MCQ
-        </a>
-        <a href="<?= BASE_URL ?>/modules/timetable/index.php" class="nav-item">
-            <i class="fas fa-calendar-alt"></i> ক্লাস রুটিন
-        </a>
-        <a href="<?= BASE_URL ?>/modules/syllabus/index.php" class="nav-item">
-            <i class="fas fa-list-alt"></i> সিলেবাস
-        </a>
-        <a href="<?= BASE_URL ?>/modules/teacher/diary.php" class="nav-item">
-            <i class="fas fa-book-open"></i> ক্লাস ডাইরি
-        </a>
-        <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item">
-            <i class="fas fa-file-upload"></i> বাল্ক ভর্তি (Excel)
-        </a>
-        <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item">
-            <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
-        </a>
 
-        <span class="nav-section">আর্থিক</span>
-        <a href="<?= BASE_URL ?>/modules/fees/collection.php" class="nav-item">
-            <i class="fas fa-money-bill-wave"></i> ফি সংগ্রহ
-        </a>
-        <a href="<?= BASE_URL ?>/modules/fees/due.php" class="nav-item">
-            <i class="fas fa-exclamation-circle"></i> বকেয়া ফি
-        </a>
-        <a href="<?= BASE_URL ?>/modules/fees/report.php" class="nav-item">
-            <i class="fas fa-chart-bar"></i> আর্থিক রিপোর্ট
-        </a>
+        <!-- ছাত্র বিভাগ -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('students')">
+                <span><i class="fas fa-user-graduate"></i> ছাত্র</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-students"></i>
+            </div>
+            <div class="nav-group-items" id="group-students">
+                <a href="<?= BASE_URL ?>/modules/student/list.php" class="nav-item nav-sub">
+                    <i class="fas fa-list"></i> ছাত্র তালিকা
+                </a>
+                <a href="<?= BASE_URL ?>/modules/student/admission.php" class="nav-item nav-sub">
+                    <i class="fas fa-user-plus"></i> নতুন ভর্তি
+                </a>
+                <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
+                <a href="<?= BASE_URL ?>/modules/student/classes.php" class="nav-item nav-sub">
+                    <i class="fas fa-school"></i> শ্রেণী ও বিভাগ
+                </a>
+                <?php endif; ?>
+                <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item nav-sub">
+                    <i class="fas fa-file-excel"></i> বাল্ক ভর্তি
+                </a>
+            </div>
+        </div>
 
-        <span class="nav-section">যোগাযোগ</span>
-        <a href="<?= BASE_URL ?>/modules/notice/index.php" class="nav-item">
-            <i class="fas fa-bullhorn"></i> নোটিশ বোর্ড
-        </a>
-        <a href="<?= BASE_URL ?>/modules/parent/messages.php" class="nav-item">
-            <i class="fas fa-comments"></i> অভিভাবক বার্তা
-            <?php
-            try {
-                $db = getDB();
-                $unread = $db->query("SELECT COUNT(*) FROM parent_messages WHERE status='unread'")->fetchColumn();
-                if ($unread > 0) echo '<span class="nav-badge">' . $unread . '</span>';
-            } catch(Exception $e){}
-            ?>
-        </a>
-        <?php endif; ?>
-
-        <span class="nav-section">AI সহায়তা</span>
-        <a href="<?= BASE_URL ?>/modules/ai/assistant.php" class="nav-item">
-            <i class="fas fa-robot"></i> AI সহকারী
-        </a>
-
+        <!-- শিক্ষক ও স্টাফ -->
         <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-        <span class="nav-section">সিস্টেম</span>
-        <a href="<?= BASE_URL ?>/modules/student/classes.php" class="nav-item">
-            <i class="fas fa-school"></i> শ্রেণী ও বিভাগ
-        </a>
-        <a href="<?= BASE_URL ?>/modules/exam/subjects.php" class="nav-item">
-            <i class="fas fa-book"></i> বিষয়সমূহ
-        </a>
-        <a href="<?= BASE_URL ?>/modules/notice/holidays.php" class="nav-item">
-            <i class="fas fa-calendar-times"></i> ছুটির তালিকা
-        </a>
-        <a href="<?= BASE_URL ?>/settings.php" class="nav-item">
-            <i class="fas fa-cog"></i> সেটিংস
-        </a>
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('teachers')">
+                <span><i class="fas fa-chalkboard-teacher"></i> শিক্ষক ও স্টাফ</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-teachers"></i>
+            </div>
+            <div class="nav-group-items" id="group-teachers">
+                <a href="<?= BASE_URL ?>/modules/teacher/list.php" class="nav-item nav-sub">
+                    <i class="fas fa-users"></i> শিক্ষক তালিকা
+                </a>
+                <a href="<?= BASE_URL ?>/checkin.php" class="nav-item nav-sub">
+                    <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
+                </a>
+                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub">
+                    <i class="fas fa-chart-bar"></i> উপস্থিতি রিপোর্ট
+                </a>
+            </div>
+        </div>
         <?php endif; ?>
+
+        <!-- একাডেমিক -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('academic')">
+                <span><i class="fas fa-graduation-cap"></i> একাডেমিক</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-academic"></i>
+            </div>
+            <div class="nav-group-items" id="group-academic">
+                <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item nav-sub">
+                    <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
+                </a>
+                <a href="<?= BASE_URL ?>/modules/exam/marks.php" class="nav-item nav-sub">
+                    <i class="fas fa-pen"></i> মার্ক এন্ট্রি
+                </a>
+                <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item nav-sub">
+                    <i class="fas fa-question-circle"></i> মডেল টেস্ট / MCQ
+                </a>
+                <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
+                <a href="<?= BASE_URL ?>/modules/exam/subjects.php" class="nav-item nav-sub">
+                    <i class="fas fa-book"></i> বিষয়সমূহ
+                </a>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- ক্লাস ম্যানেজমেন্ট -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('classmanage')">
+                <span><i class="fas fa-book-open"></i> ক্লাস ম্যানেজমেন্ট</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-classmanage"></i>
+            </div>
+            <div class="nav-group-items" id="group-classmanage">
+                <a href="<?= BASE_URL ?>/modules/teacher/diary.php" class="nav-item nav-sub">
+                    <i class="fas fa-book-open"></i> ক্লাস ডাইরি
+                </a>
+                <a href="<?= BASE_URL ?>/modules/syllabus/index.php" class="nav-item nav-sub">
+                    <i class="fas fa-list-alt"></i> সিলেবাস
+                </a>
+                <a href="<?= BASE_URL ?>/modules/timetable/index.php" class="nav-item nav-sub">
+                    <i class="fas fa-calendar-alt"></i> ক্লাস রুটিন
+                </a>
+            </div>
+        </div>
+
+        <!-- উপস্থিতি -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('attendance')">
+                <span><i class="fas fa-clipboard-check"></i> উপস্থিতি</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-attendance"></i>
+            </div>
+            <div class="nav-group-items" id="group-attendance">
+                <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub">
+                    <i class="fas fa-clipboard-list"></i> ছাত্র উপস্থিতি
+                </a>
+                <a href="<?= BASE_URL ?>/modules/attendance/report.php" class="nav-item nav-sub">
+                    <i class="fas fa-chart-pie"></i> উপস্থিতি রিপোর্ট
+                </a>
+            </div>
+        </div>
+
+        <!-- আর্থিক -->
+        <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('finance')">
+                <span><i class="fas fa-money-bill-wave"></i> আর্থিক</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-finance"></i>
+            </div>
+            <div class="nav-group-items" id="group-finance">
+                <a href="<?= BASE_URL ?>/modules/fees/collection.php" class="nav-item nav-sub">
+                    <i class="fas fa-hand-holding-usd"></i> ফি সংগ্রহ
+                </a>
+                <a href="<?= BASE_URL ?>/modules/fees/due.php" class="nav-item nav-sub">
+                    <i class="fas fa-exclamation-circle"></i> বকেয়া ফি
+                </a>
+                <a href="<?= BASE_URL ?>/modules/fees/report.php" class="nav-item nav-sub">
+                    <i class="fas fa-chart-bar"></i> আর্থিক রিপোর্ট
+                </a>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- বিজ্ঞপ্তি ও যোগাযোগ -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('comms')">
+                <span><i class="fas fa-bullhorn"></i> বিজ্ঞপ্তি ও যোগাযোগ</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-comms"></i>
+            </div>
+            <div class="nav-group-items" id="group-comms">
+                <a href="<?= BASE_URL ?>/modules/notice/index.php" class="nav-item nav-sub">
+                    <i class="fas fa-bullhorn"></i> নোটিশ বোর্ড
+                </a>
+                <a href="<?= BASE_URL ?>/modules/parent/messages.php" class="nav-item nav-sub">
+                    <i class="fas fa-comments"></i> অভিভাবক বার্তা
+                    <?php
+                    try {
+                        $db = getDB();
+                        $unread = $db->query("SELECT COUNT(*) FROM parent_messages WHERE status='unread'")->fetchColumn();
+                        if ($unread > 0) echo '<span class="nav-badge">' . $unread . '</span>';
+                    } catch(Exception $e){}
+                    ?>
+                </a>
+                <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
+                <a href="<?= BASE_URL ?>/modules/notice/holidays.php" class="nav-item nav-sub">
+                    <i class="fas fa-calendar-times"></i> ছুটির তালিকা
+                </a>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php endif; ?>
+
+        <!-- AI ও সিস্টেম -->
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('system')">
+                <span><i class="fas fa-cog"></i> সিস্টেম</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-system"></i>
+            </div>
+            <div class="nav-group-items" id="group-system">
+                <a href="<?= BASE_URL ?>/modules/ai/assistant.php" class="nav-item nav-sub">
+                    <i class="fas fa-robot"></i> AI সহকারী
+                </a>
+                <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
+                <a href="<?= BASE_URL ?>/settings.php" class="nav-item nav-sub">
+                    <i class="fas fa-sliders-h"></i> সেটিংস
+                </a>
+                <?php endif; ?>
+            </div>
+        </div>
+
     </nav>
 
     <div style="padding: 16px; border-top: 1px solid rgba(255,255,255,.08);">
