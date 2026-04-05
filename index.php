@@ -29,6 +29,28 @@ $recentStudents = $db->query("SELECT s.*, c.class_name_bn FROM students s LEFT J
 // নোটিশ
 $notices = $db->query("SELECT * FROM notices WHERE is_published=1 ORDER BY created_at DESC LIMIT 5")->fetchAll();
 
+// শিক্ষক আজকের চেক ইন স্ট্যাটাস
+$teacherCheckedIn = 0;
+$teacherNotCheckedIn = 0;
+$teacherCheckedOut = 0;
+try {
+    $teacherCheckedIn = $db->query("SELECT COUNT(*) FROM teacher_attendance WHERE date='$today' AND check_in IS NOT NULL")->fetchColumn();
+    $teacherCheckedOut = $db->query("SELECT COUNT(*) FROM teacher_attendance WHERE date='$today' AND check_out IS NOT NULL")->fetchColumn();
+    $teacherNotCheckedIn = $db->query("SELECT COUNT(*) FROM teachers WHERE is_active=1")->fetchColumn() - $teacherCheckedIn;
+} catch(Exception $e) {}
+
+// আজকের শিক্ষক উপস্থিতি তালিকা
+$teacherAttendanceToday = [];
+try {
+    $teacherAttendanceToday = $db->query("
+        SELECT ta.*, t.name_bn, t.name, t.designation_bn, t.teacher_id_no
+        FROM teacher_attendance ta
+        JOIN teachers t ON ta.teacher_id = t.id
+        WHERE ta.date = '$today'
+        ORDER BY ta.check_in ASC
+    ")->fetchAll();
+} catch(Exception $e) {}
+
 // উপস্থিতি ডেটা (শেষ ৭ দিন)
 $attendanceChart = [];
 for ($i = 6; $i >= 0; $i--) {
@@ -78,6 +100,20 @@ require_once 'includes/header.php';
         <div>
             <div class="stat-value"><?= toBanglaNumber($dueCount) ?></div>
             <div class="stat-label">ফি বকেয়া ছাত্র</div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon"><i class="fas fa-fingerprint"></i></div>
+        <div>
+            <div class="stat-value"><?= toBanglaNumber($teacherCheckedIn) ?></div>
+            <div class="stat-label">শিক্ষক আজ চেক ইন</div>
+        </div>
+    </div>
+    <div class="stat-card red">
+        <div class="stat-icon"><i class="fas fa-user-times"></i></div>
+        <div>
+            <div class="stat-value"><?= toBanglaNumber($teacherNotCheckedIn) ?></div>
+            <div class="stat-label">এখনো আসেননি</div>
         </div>
     </div>
 </div>
@@ -146,6 +182,55 @@ require_once 'includes/header.php';
             </div>
             <?php endif; ?>
         </div>
+    </div>
+</div>
+
+<!-- শিক্ষক উপস্থিতি টেবিল -->
+<div class="card mb-24">
+    <div class="card-header">
+        <span class="card-title"><i class="fas fa-chalkboard-teacher"></i> আজকের শিক্ষক উপস্থিতি</span>
+        <a href="modules/attendance/checkin.php" class="btn btn-outline btn-sm">বিস্তারিত</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>নাম</th><th>পদবী</th><th>চেক ইন</th><th>চেক আউট</th><th>মোট সময়</th><th>অবস্থা</th></tr>
+            </thead>
+            <tbody>
+                <?php if(empty($teacherAttendanceToday)): ?>
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text-muted);">আজ এখনো কেউ চেক ইন করেননি</td></tr>
+                <?php else: foreach($teacherAttendanceToday as $ta):
+                    $totalH = '';
+                    if($ta['check_in'] && $ta['check_out']) {
+                        $d = strtotime($ta['check_out']) - strtotime($ta['check_in']);
+                        $totalH = toBanglaNumber(floor($d/3600)).'ঘ '.toBanglaNumber(floor(($d%3600)/60)).'মি';
+                    }
+                ?>
+                <tr>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <div class="avatar" style="font-size:12px;"><?= mb_substr($ta['name_bn']??$ta['name'],0,1) ?></div>
+                            <div>
+                                <div style="font-weight:600;font-size:13px;"><?= e($ta['name_bn']??$ta['name']) ?></div>
+                                <div style="font-size:11px;color:var(--text-muted);"><?= e($ta['teacher_id_no']??'')?></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="font-size:12px;color:var(--text-muted);"><?= e($ta['designation_bn']??'')?></td>
+                    <td style="color:var(--success);font-weight:600;font-size:13px;"><?= $ta['check_in'] ? date('h:i A',strtotime($ta['check_in'])) : '-' ?></td>
+                    <td style="color:var(--danger);font-size:13px;"><?= $ta['check_out'] ? date('h:i A',strtotime($ta['check_out'])) : '<span style="color:var(--text-muted);">এখনো নেই</span>' ?></td>
+                    <td style="font-size:13px;font-weight:600;"><?= $totalH ?: '-' ?></td>
+                    <td>
+                        <?php if($ta['check_out']): ?>
+                        <span class="badge badge-success">সম্পন্ন</span>
+                        <?php elseif($ta['check_in']): ?>
+                        <span class="badge badge-warning">চেক ইন</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
     </div>
 </div>
 
