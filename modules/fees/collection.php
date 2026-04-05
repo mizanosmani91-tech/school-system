@@ -222,6 +222,23 @@ require_once '../../includes/header.php';
 </div>
 
 <script>
+function searchStudent() {
+    const q = document.getElementById('studentSearch').value;
+    if (q.length < 2) return;
+    fetch('<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+            const dd = document.getElementById('searchDropdown');
+            if (!data.length) { dd.style.display = 'none'; return; }
+            dd.innerHTML = data.map(s =>
+                `<div onclick="selectStudent(${s.id},'${s.name_bn||s.name}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;">
+                    <strong>${s.name_bn||s.name}</strong> &mdash; ${s.student_id} &mdash; ${s.class_name_bn||''}
+                </div>`
+            ).join('');
+            dd.style.display = 'block';
+        });
+}
+
 function setAmount(sel) {
     const opt = sel.selectedOptions[0];
     const amount = opt.dataset.amount || '';
