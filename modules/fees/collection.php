@@ -37,6 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['collect_fee'])) {
 // Search student
 $studentResult = null;
 $studentFees = [];
+$customFeeMap = []; // student-specific fee amounts
 if (isset($_GET['student_id'])) {
     $sid = (int)$_GET['student_id'];
     $stmt = $db->prepare("SELECT s.*, c.class_name_bn FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.id=?");
@@ -48,6 +49,13 @@ if (isset($_GET['student_id'])) {
         WHERE fc.student_id=? ORDER BY fc.payment_date DESC LIMIT 12");
     $stmt2->execute([$sid]);
     $studentFees = $stmt2->fetchAll();
+
+    // Load custom fee assignments for this student
+    $cfStmt = $db->prepare("SELECT fee_type_id, custom_amount FROM student_fee_assignments WHERE student_id=? AND is_active=1");
+    $cfStmt->execute([$sid]);
+    foreach ($cfStmt->fetchAll() as $cf) {
+        $customFeeMap[$cf['fee_type_id']] = $cf['custom_amount'];
+    }
 }
 
 require_once '../../includes/header.php';
@@ -111,12 +119,24 @@ require_once '../../includes/header.php';
                         <label>ফির ধরন <span>*</span></label>
                         <select name="fee_type_id" class="form-control" required onchange="setAmount(this)">
                             <option value="">ফির ধরন নির্বাচন করুন</option>
-                            <?php foreach ($feeTypes as $ft): ?>
-                            <option value="<?= $ft['id'] ?>" data-amount="<?= $ft['amount'] ?>">
-                                <?= e($ft['fee_name_bn']) ?> (৳<?= number_format($ft['amount']) ?>)
+                            <?php foreach ($feeTypes as $ft):
+                                $customAmt = $customFeeMap[$ft['id']] ?? null;
+                                $displayAmt = $customAmt ?? $ft['amount'];
+                                $isCustom = $customAmt !== null;
+                            ?>
+                            <option value="<?= $ft['id'] ?>"
+                                data-amount="<?= $displayAmt ?>"
+                                data-default="<?= $ft['amount'] ?>"
+                                data-custom="<?= $isCustom ? 1 : 0 ?>">
+                                <?= e($ft['fee_name_bn']) ?>
+                                (৳<?= number_format($displayAmt) ?>
+                                <?= $isCustom ? ' — ব্যক্তিগত' : '' ?>)
                             </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if (!empty($customFeeMap)): ?>
+                        <small style="color:#e67e22;font-size:11px;"><i class="fas fa-info-circle"></i> এই ছাত্রের জন্য কিছু ফী আলাদাভাবে নির্ধারিত আছে।</small>
+                        <?php endif; ?>
                     </div>
                     <div class="form-group">
                         <label>মাস/বছর</label>
@@ -204,7 +224,24 @@ require_once '../../includes/header.php';
 <script>
 function setAmount(sel) {
     const opt = sel.selectedOptions[0];
-    document.getElementById('feeAmount').value = opt.dataset.amount || '';
+    const amount = opt.dataset.amount || '';
+    const defaultAmt = opt.dataset.default || '';
+    const isCustom = opt.dataset.custom === '1';
+    document.getElementById('feeAmount').value = amount;
+    // Show hint if custom
+    let hint = document.getElementById('feeAmountHint');
+    if (!hint) {
+        hint = document.createElement('small');
+        hint.id = 'feeAmountHint';
+        hint.style.cssText = 'font-size:11px;display:block;margin-top:4px;';
+        document.getElementById('feeAmount').parentNode.appendChild(hint);
+    }
+    if (isCustom) {
+        hint.style.color = '#e67e22';
+        hint.innerHTML = `<i class="fas fa-tag"></i> ব্যক্তিগত নির্ধারিত: ৳${parseFloat(amount).toLocaleString()} (ডিফল্ট: ৳${parseFloat(defaultAmt).toLocaleString()})`;
+    } else {
+        hint.innerHTML = '';
+    }
     calcTotal();
 }
 
