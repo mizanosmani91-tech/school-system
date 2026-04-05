@@ -346,7 +346,7 @@ require_once '../../includes/header.php';
                     </span></td>
                     <?php if ($isModelTest): ?>
                     <td><span style="font-weight:700;color:var(--accent);">
-                        <?= $m['rank_position'] ? toBanglaNumber($m['rank_position']).'ম' : '-' ?>
+                        <?= !empty($m['rank_position']) ? toBanglaNumber($m['rank_position']).'ম' : '-' ?>
                     </span></td>
                     <?php else: ?>
                     <td><span id="grade<?= $s['id'] ?>" class="badge badge-<?= isset($m['grade'])&&$m['grade']==='F'?'danger':'success' ?>">
