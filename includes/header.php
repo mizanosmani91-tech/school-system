@@ -375,7 +375,7 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/checkin.php" class="nav-item nav-sub">
                     <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
                 </a>
-                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub">
+                <a href="<?= BASE_URL ?>/modules/teacher/teacher_report.php" class="nav-item nav-sub">
                     <i class="fas fa-chart-bar"></i> উপস্থিতি রিপোর্ট
                 </a>
             </div>
