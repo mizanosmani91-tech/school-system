@@ -37,11 +37,12 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 
 /* ========== SIDEBAR ========== */
 .sidebar {
-    width: 260px; min-height: 100vh; background: var(--sidebar-bg);
+    width: 260px; height: 100vh; background: var(--sidebar-bg);
     position: fixed; left: 0; top: 0; z-index: 100;
     display: flex; flex-direction: column;
     transition: width .3s ease;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 .sidebar-logo {
     padding: 20px 16px; border-bottom: 1px solid rgba(255,255,255,.08);
