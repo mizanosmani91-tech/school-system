@@ -19,12 +19,17 @@ if ($filterClass) {
     $exams = $exStmt->fetchAll();
 }
 
-// Subjects for class
+// Subjects
 $subjects = [];
 if ($filterClass) {
-    $subStmt = $db->prepare("SELECT s.* FROM subjects s JOIN class_subjects cs ON s.id=cs.subject_id WHERE cs.class_id=? AND s.is_active=1 ORDER BY s.subject_name_bn");
-    $subStmt->execute([$filterClass]);
-    $subjects = $subStmt->fetchAll();
+    try {
+        $subStmt = $db->prepare("SELECT s.* FROM subjects s JOIN class_subjects cs ON s.id=cs.subject_id WHERE cs.class_id=? AND s.is_active=1 ORDER BY s.subject_name_bn");
+        $subStmt->execute([$filterClass]);
+        $subjects = $subStmt->fetchAll();
+    } catch(Exception $e) {
+        // class_subjects না থাকলে সব subject দেখাও
+        $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
+    }
 }
 
 // Students for class
@@ -93,22 +98,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
     $classId = (int)$_POST['class_id'];
     $year    = $_POST['year'];
 
-    // Get all exams for this class/year
-    $allExams = $db->prepare("SELECT * FROM exams WHERE (class_id=? OR class_id IS NULL) AND academic_year=? AND is_published=1");
-    $allExams->execute([$classId, $year]);
+    // Get all exams for this year
+    $allExams = $db->prepare("SELECT * FROM exams WHERE academic_year=? ORDER BY id ASC");
+    $allExams->execute([$year]);
     $allExams = $allExams->fetchAll();
 
-    // Categorize exams
+    // Categorize exams — id অনুযায়ী ক্রম
     $examMap = ['model1'=>null,'model2'=>null,'half_yearly'=>null,'model3'=>null,'model4'=>null,'annual'=>null];
+    $modelCount = 0;
+    $halfYearlyFound = false;
     foreach ($allExams as $ex) {
-        if ($ex['exam_type'] === 'test') {
-            $seq = (int)$ex['sequence_no'];
-            if ($seq === 1) $examMap['model1'] = $ex['id'];
-            elseif ($seq === 2) $examMap['model2'] = $ex['id'];
-            elseif ($seq === 3) $examMap['model3'] = $ex['id'];
-            elseif ($seq === 4) $examMap['model4'] = $ex['id'];
+        if (in_array($ex['exam_type'], ['test','monthly'])) {
+            $modelCount++;
+            if ($modelCount === 1) $examMap['model1'] = $ex['id'];
+            elseif ($modelCount === 2) $examMap['model2'] = $ex['id'];
+            elseif ($modelCount === 3) $examMap['model3'] = $ex['id'];
+            elseif ($modelCount === 4) $examMap['model4'] = $ex['id'];
         } elseif ($ex['exam_type'] === 'half_yearly') {
             $examMap['half_yearly'] = $ex['id'];
+            $halfYearlyFound = true;
+            $modelCount = 0; // বার্ষিকের মডেল টেস্ট আলাদা গণনা
         } elseif ($ex['exam_type'] === 'annual') {
             $examMap['annual'] = $ex['id'];
         }
@@ -118,9 +127,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
     $stList->execute([$classId, $year]);
     $stList = $stList->fetchAll(PDO::FETCH_COLUMN);
 
-    $subList = $db->prepare("SELECT subject_id FROM class_subjects WHERE class_id=?");
-    $subList->execute([$classId]);
-    $subList = $subList->fetchAll(PDO::FETCH_COLUMN);
+    try {
+        $subList = $db->prepare("SELECT subject_id FROM class_subjects WHERE class_id=?");
+        $subList->execute([$classId]);
+        $subList = $subList->fetchAll(PDO::FETCH_COLUMN);
+    } catch(Exception $e) {
+        $subList = $db->query("SELECT id FROM subjects WHERE is_active=1")->fetchAll(PDO::FETCH_COLUMN);
+    }
 
     // Grade function
     $getGrade = function($marks) {
