@@ -4,7 +4,7 @@ requireLogin(['super_admin','principal','teacher']);
 $pageTitle = 'পরীক্ষা ও ফলাফল';
 $db = getDB();
 
-$exams = $db->query("SELECT * FROM exams WHERE academic_year='".date('Y')."' ORDER BY start_date")->fetchAll();
+$exams = $db->query("SELECT * FROM exams ORDER BY academic_year DESC, start_date")->fetchAll();
 $classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
 $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1")->fetchAll();
 
