@@ -507,5 +507,8 @@ tbody tr:hover { background: #f7fafc; }
 
     <?php endif; ?>
 
+</div><!-- /content -->
+<?php endif; ?>
+
 </body>
 </html>
