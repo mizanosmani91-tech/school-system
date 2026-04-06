@@ -321,8 +321,9 @@ if (isset($parentLayout) && $parentLayout) {
         </a>
 
         <span class="nav-section">উপস্থিতি</span>
-        <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'checkin.php' ? 'active' : '') ?>">
-            <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
+        <!-- এখানে পরিবর্তন করা হয়েছে -->
+        <a href="<?= BASE_URL ?>/modules/teacher/teacher_report.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'teacher_report.php' ? 'active' : '') ?>">
+            <i class="fas fa-chart-bar"></i> উপস্থিতি রিপোর্ট
         </a>
 
         <span class="nav-section">যোগাযোগ</span>
