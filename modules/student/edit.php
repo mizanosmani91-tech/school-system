@@ -136,19 +136,11 @@ require_once '../../includes/header.php';
 </div>
 <div class="card mb-16">
     <div class="card-header" style="background:#f4ecf7;">
-        <span class="card-title" style="color:#7d3c98;"><i class="fas fa-money-bill-wave"></i> ফি তথ্য</span>
+        <span class="card-title" style="color:#7d3c98;"><i class="fas fa-building"></i> হোস্টেল তথ্য</span>
     </div>
     <div class="card-body">
-        <div class="form-grid">
-            <div class="form-group">
-                <label>মাসিক বেতন (টাকা)</label>
-                <input type="number" name="monthly_fee" class="form-control" min="0" step="0.01"
-                    value="<?=e($student['monthly_fee'] ?? 0)?>">
-            </div>
-        </div>
-
         <!-- হোস্টেল -->
-        <div style="margin-top:16px;">
+        <div>
             <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
                 <input type="checkbox" name="is_hostel" id="isHostelCheck" onchange="toggleHostel(this)"
                     style="width:18px;height:18px;" <?=!empty($student['is_hostel'])&&$student['is_hostel']?'checked':''?>>
@@ -182,10 +174,15 @@ require_once '../../includes/header.php';
             </div>
         </div>
 
-        <!-- মোট -->
-        <div id="totalBox" style="margin-top:16px;padding:12px 16px;background:#eafaf1;border-radius:8px;border-left:4px solid var(--success);">
-            <strong>মোট মাসিক খরচ:</strong>
-            <span id="totalAmount" style="font-size:18px;font-weight:700;color:var(--success);margin-left:8px;">৳ 0</span>
+        <!-- ফী নির্ধারণ লিংক -->
+        <div style="margin-top:16px;padding:12px 16px;background:#fff8f0;border-radius:8px;border-left:4px solid #e67e22;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+                <div style="font-weight:600;font-size:14px;color:#e67e22;"><i class="fas fa-tags"></i> ব্যক্তিগত ফী নির্ধারণ</div>
+                <div style="font-size:12px;color:#718096;margin-top:2px;">টিউশন, লাইব্রেরি বা অন্য ফী আলাদাভাবে নির্ধারণ করতে প্রোফাইলে যান।</div>
+            </div>
+            <a href="view.php?id=<?=$id?>" class="btn btn-sm" style="background:#e67e22;color:#fff;">
+                <i class="fas fa-tags"></i> ফী নির্ধারণ করুন
+            </a>
         </div>
     </div>
 </div>
@@ -204,28 +201,12 @@ function toggleHostel(cb) {
         document.getElementById('hostelFee').value = 0;
         document.getElementById('foodFee').value = 0;
     }
-    calcTotal();
 }
 
 function toggleFood(cb) {
     document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
     if (!cb.checked) document.getElementById('foodFee').value = 0;
-    calcTotal();
 }
-
-function calcTotal() {
-    const monthly = parseFloat(document.querySelector('[name=monthly_fee]').value) || 0;
-    const hostel  = parseFloat(document.getElementById('hostelFee').value) || 0;
-    const food    = parseFloat(document.getElementById('foodFee').value) || 0;
-    document.getElementById('totalAmount').textContent = '৳ ' + (monthly + hostel + food).toLocaleString();
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    calcTotal();
-    document.querySelectorAll('[name=monthly_fee],[name=hostel_fee],[name=food_fee]').forEach(el => {
-        el.addEventListener('input', calcTotal);
-    });
-});
 
 function loadSections(classId) {
     fetch('<?=BASE_URL?>/api/sections.php?class_id='+classId)

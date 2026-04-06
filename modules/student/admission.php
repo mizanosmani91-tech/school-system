@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $birthCert = trim($_POST['birth_cert'] ?? '');
 
     // ফি সংক্রান্ত তথ্য
-    $monthlyFee   = (float)($_POST['monthly_fee'] ?? 0);
+    $monthlyFee   = 0; // ভর্তির পরে profile থেকে নির্ধারণ করা হবে
     $isHostel     = isset($_POST['is_hostel']) ? 1 : 0;
     $hostelFee    = $isHostel ? (float)($_POST['hostel_fee'] ?? 0) : 0;
     $isHostelFood = ($isHostel && isset($_POST['is_hostel_food'])) ? 1 : 0;
@@ -254,21 +254,18 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- ফি তথ্য -->
+<!-- হোস্টেল তথ্য -->
 <div class="card mb-24">
     <div class="card-header" style="background:#f4ecf7;">
-        <span class="card-title" style="color:#7d3c98;"><i class="fas fa-money-bill-wave"></i> ফি তথ্য</span>
+        <span class="card-title" style="color:#7d3c98;"><i class="fas fa-building"></i> হোস্টেল তথ্য</span>
     </div>
     <div class="card-body">
-        <div class="form-grid">
-            <div class="form-group">
-                <label>মাসিক বেতন (টাকা) <span>*</span></label>
-                <input type="number" name="monthly_fee" class="form-control" placeholder="০" min="0" step="0.01" required>
-            </div>
+        <div style="padding:10px 14px;background:#fff8f0;border-radius:8px;font-size:13px;margin-bottom:16px;border-left:3px solid #e67e22;">
+            <i class="fas fa-info-circle" style="color:#e67e22;"></i>
+            টিউশন, লাইব্রেরি বা অন্য ফী ভর্তির পরে ছাত্রের প্রোফাইল থেকে আলাদাভাবে নির্ধারণ করা যাবে।
         </div>
 
-        <!-- হোস্টেল -->
-        <div style="margin-top:16px;">
+        <div>
             <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
                 <input type="checkbox" name="is_hostel" id="isHostelCheck" onchange="toggleHostel(this)" style="width:18px;height:18px;">
                 হোস্টেলে থাকবে
@@ -282,15 +279,12 @@ require_once '../../includes/header.php';
                     <input type="number" name="hostel_fee" id="hostelFee" class="form-control" placeholder="০" min="0" step="0.01">
                 </div>
             </div>
-
-            <!-- খাবার -->
             <div style="margin-top:12px;">
                 <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
                     <input type="checkbox" name="is_hostel_food" id="isHostelFoodCheck" onchange="toggleFood(this)" style="width:18px;height:18px;">
                     হোস্টেলের খাবার খাবে
                 </label>
             </div>
-
             <div id="foodFields" style="display:none;margin-top:12px;">
                 <div class="form-grid">
                     <div class="form-group">
@@ -299,12 +293,6 @@ require_once '../../includes/header.php';
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- মোট দেখানো -->
-        <div id="totalBox" style="display:none;margin-top:16px;padding:12px 16px;background:#eafaf1;border-radius:8px;border-left:4px solid var(--success);">
-            <strong>মোট মাসিক খরচ:</strong>
-            <span id="totalAmount" style="font-size:18px;font-weight:700;color:var(--success);margin-left:8px;">৳ ০</span>
         </div>
     </div>
 </div>
@@ -324,31 +312,12 @@ function toggleHostel(cb) {
         document.getElementById('hostelFee').value = '';
         document.getElementById('foodFee').value = '';
     }
-    calcTotal();
 }
 
 function toggleFood(cb) {
     document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
     if (!cb.checked) document.getElementById('foodFee').value = '';
-    calcTotal();
 }
-
-function calcTotal() {
-    const monthly = parseFloat(document.querySelector('[name=monthly_fee]').value) || 0;
-    const hostel  = parseFloat(document.getElementById('hostelFee').value) || 0;
-    const food    = parseFloat(document.getElementById('foodFee').value) || 0;
-    const total   = monthly + hostel + food;
-    const box     = document.getElementById('totalBox');
-    box.style.display = (monthly > 0) ? 'block' : 'none';
-    document.getElementById('totalAmount').textContent = '৳ ' + total.toLocaleString('bn-BD');
-}
-
-// সব fee ইনপুটে লাইভ আপডেট
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('[name=monthly_fee],[name=hostel_fee],[name=food_fee]').forEach(el => {
-        el.addEventListener('input', calcTotal);
-    });
-});
 
 function loadSections(classId) {
     if (!classId) return;
