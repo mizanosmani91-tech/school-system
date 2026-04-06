@@ -130,7 +130,7 @@ require_once '../../includes/header.php';
         $nameParts   = explode(' ', $nameEn, 2);
         $firstNameEn = $nameParts[0] ?? '';
         $lastNameEn  = $nameParts[1] ?? '';
-        $photoUrl    = $s['photo'] ? BASE_URL.'/'.$s['photo'] : '';
+        $photoUrl    = $s['photo'] ? BASE_URL.'/assets/uploads/'.$s['photo'] : '';
         $classNameBn = $s['class_name_bn'] ?? '';
         $section     = $s['section_name'] ?? '';
         $roll        = $s['roll_number'] ?? '';
