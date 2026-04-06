@@ -1,41 +1,45 @@
 <?php
 // ================================================================
-// কনফিগারেশন ফাইল — Railway Environment Variables সাপোর্ট
+// কনফিগারেশন ফাইল — Railway Production Ready
 // ================================================================
 
-// Railway MySQL plugin দিলে এগুলো auto সেট হয়
-define('DB_HOST',    getenv('MYSQLHOST')     ?: 'localhost');
+// ── Database (Railway environment variables থেকে নেবে) ──────────
+define('DB_HOST',    getenv('MYSQLHOST')     ?: 'mysql.railway.internal');
 define('DB_USER',    getenv('MYSQLUSER')     ?: 'root');
 define('DB_PASS',    getenv('MYSQLPASSWORD') ?: '');
-define('DB_NAME',    getenv('MYSQLDATABASE') ?: 'school_db');
-define('DB_PORT',    getenv('MYSQLPORT')     ?: '3306');
+define('DB_NAME',    getenv('MYSQLDATABASE') ?: 'railway');
+define('DB_PORT',    getenv('MYSQLPORT')     ?: 3306);
 define('DB_CHARSET', 'utf8mb4');
 
-// Railway public domain auto detect
-$_railwayDomain = getenv('RAILWAY_PUBLIC_DOMAIN');
-define('BASE_URL', $_railwayDomain ? 'https://'.$_railwayDomain : (getenv('APP_URL') ?: 'http://localhost'));
+// ── App URL (Railway deployment URL) ────────────────────────────
+// Railway এ APP_URL environment variable সেট করুন
+// যেমন: https://school-system-production-d310.up.railway.app
+define('BASE_URL',  rtrim(getenv('APP_URL') ?: 'http://localhost/school_system', '/'));
 define('BASE_PATH', dirname(__DIR__));
 
-define('APP_NAME', 'স্কুল ম্যানেজমেন্ট সিস্টেম');
+// ── App Info ────────────────────────────────────────────────────
+define('APP_NAME',    'স্কুল ম্যানেজমেন্ট সিস্টেম');
 define('APP_VERSION', '1.0.0');
-define('APP_LANG', 'bn');
+define('APP_LANG',    'bn');
 
+// ── File Uploads ────────────────────────────────────────────────
 define('UPLOAD_PATH', BASE_PATH . '/assets/uploads/');
-define('UPLOAD_URL', BASE_URL . '/assets/uploads/');
+define('UPLOAD_URL',  BASE_URL  . '/assets/uploads/');
 
-// Session
+// ── Session ─────────────────────────────────────────────────────
 define('SESSION_LIFETIME', 3600 * 8); // 8 hours
-define('SESSION_NAME', 'school_sess');
+define('SESSION_NAME',     'school_sess');
 
-// AI API (Claude / Anthropic)
-define('AI_API_KEY', ''); // আপনার Anthropic API Key এখানে
-define('AI_MODEL', 'claude-sonnet-4-20250514');
+// ── AI API (Anthropic) ──────────────────────────────────────────
+define('AI_API_KEY', getenv('AI_API_KEY') ?: '');
+define('AI_MODEL',   'claude-sonnet-4-20250514');
 
-// Timezone
+// ── Timezone ────────────────────────────────────────────────────
 date_default_timezone_set('Asia/Dhaka');
 
-// Error Reporting (production এ false করুন)
-define('DEBUG_MODE', true);
+// ── Error Reporting ─────────────────────────────────────────────
+// Railway production এ DEBUG_MODE = false রাখুন
+define('DEBUG_MODE', (bool)(getenv('DEBUG_MODE') ?: false));
 if (DEBUG_MODE) {
     ini_set('display_errors', 1);
     error_reporting(E_ALL);

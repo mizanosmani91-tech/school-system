@@ -5,17 +5,16 @@
 
 require_once __DIR__ . '/config.php';
 
-// PDO কানেকশন
+// PDO কানেকশন — Railway port support সহ
 function getDB() {
     static $pdo = null;
     if ($pdo === null) {
         try {
-            $port = defined('DB_PORT') ? DB_PORT : '3306';
-            $dsn = "mysql:host=" . DB_HOST . ";port=" . $port . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+            $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
             $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
         } catch (PDOException $e) {
             die('<div style="color:red;padding:20px;font-family:sans-serif;">
@@ -164,18 +163,18 @@ function callAI($message, $systemPrompt = '', $history = []) {
     $messages[] = ['role' => 'user', 'content' => $message];
 
     $body = [
-        'model' => AI_MODEL,
+        'model'      => AI_MODEL,
         'max_tokens' => 1024,
-        'messages' => $messages,
+        'messages'   => $messages,
     ];
     if ($systemPrompt) $body['system'] = $systemPrompt;
 
     $ch = curl_init('https://api.anthropic.com/v1/messages');
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST => true,
-        CURLOPT_POSTFIELDS => json_encode($body),
-        CURLOPT_HTTPHEADER => [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($body),
+        CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
             'x-api-key: ' . $apiKey,
             'anthropic-version: 2023-06-01',
