@@ -41,6 +41,7 @@ if (!empty($_SESSION['parent_student_id'])) {
 $activeStudentId = (int)($_GET['student_id'] ?? ($myStudents[0]['id'] ?? 0));
 $activeStudent = null;
 foreach ($myStudents as $s) { if ($s['id'] == $activeStudentId) { $activeStudent = $s; break; } }
+$userInfo = $userInfo ?? null;
 
 $tab = $_GET['tab'] ?? 'overview';
 
@@ -221,7 +222,7 @@ tbody tr:hover { background: #f7fafc; }
         <strong><?= e(getSetting('institute_name')) ?></strong>
     </div>
     <div class="portal-header-right">
-        <span><?= e($userInfo['name'] ?? $_SESSION['user_name'] ?? $activeStudent['guardian_name'] ?? '') ?></span>
+        <span><?= e(($userInfo['name'] ?? null) ?? $_SESSION['user_name'] ?? ($activeStudent['guardian_name'] ?? '')) ?></span>
         <a href="<?= BASE_URL ?>/logout.php" style="color:#a8c0d4;text-decoration:none;"><i class="fas fa-sign-out-alt"></i></a>
     </div>
 </header>
