@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets[] = 'hostel_fee=?';     $vals[] = $hostelFee;
     $sets[] = 'is_hostel_food=?'; $vals[] = $isHostelFood;
     $sets[] = 'food_fee=?';       $vals[] = $foodFee;
-    // Photo upload — পাসপোর্ট সাইজ (200x257 px)
+    // Photo upload — Cloudinary (deploy তে photo টিকে থাকে)
     if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
         $allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
         $mimeType = mime_content_type($_FILES['photo']['tmp_name']);
@@ -59,39 +59,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
             setFlash('danger', 'ছবির সাইজ ৫MB এর বেশি হবে না।');
             header("Location: edit.php?id=$id"); exit;
         }
-
-        $dir = UPLOAD_PATH . 'students/';
-        if (!is_dir($dir)) mkdir($dir, 0755, true);
-
-        $photoPath = 'students/' . $student['student_id'] . '.jpg';
-        $dest = UPLOAD_PATH . $photoPath;
-
-        $targetW = 200; $targetH = 257;
-
-        switch ($mimeType) {
-            case 'image/png':  $src = imagecreatefrompng($_FILES['photo']['tmp_name']); break;
-            case 'image/gif':  $src = imagecreatefromgif($_FILES['photo']['tmp_name']); break;
-            case 'image/webp': $src = imagecreatefromwebp($_FILES['photo']['tmp_name']); break;
-            default:           $src = imagecreatefromjpeg($_FILES['photo']['tmp_name']); break;
-        }
-
-        if ($src) {
-            $srcW = imagesx($src); $srcH = imagesy($src);
-            $srcRatio = $srcW / $srcH; $destRatio = $targetW / $targetH;
-            if ($srcRatio > $destRatio) {
-                $cropH = $srcH; $cropW = (int)($srcH * $destRatio);
-                $cropX = (int)(($srcW - $cropW) / 2); $cropY = 0;
-            } else {
-                $cropW = $srcW; $cropH = (int)($srcW / $destRatio);
-                $cropX = 0; $cropY = (int)(($srcH - $cropH) / 2);
-            }
-            $canvas = imagecreatetruecolor($targetW, $targetH);
-            $white = imagecolorallocate($canvas, 255, 255, 255);
-            imagefill($canvas, 0, 0, $white);
-            imagecopyresampled($canvas, $src, 0, 0, $cropX, $cropY, $targetW, $targetH, $cropW, $cropH);
-            imagejpeg($canvas, $dest, 90);
-            imagedestroy($src); imagedestroy($canvas);
-            $sets[] = 'photo=?'; $vals[] = $photoPath;
+        require_once '../../includes/cloudinary_upload.php';
+        $cloudUrl = uploadToCloudinary($_FILES['photo']['tmp_name'], 'students/' . $student['student_id']);
+        if ($cloudUrl) {
+            $sets[] = 'photo=?'; $vals[] = $cloudUrl; // Cloudinary URL database এ save হবে
+        } else {
+            setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+            header("Location: edit.php?id=$id"); exit;
         }
     }
 
