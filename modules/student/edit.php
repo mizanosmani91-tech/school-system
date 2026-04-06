@@ -46,6 +46,54 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets[] = 'hostel_fee=?';     $vals[] = $hostelFee;
     $sets[] = 'is_hostel_food=?'; $vals[] = $isHostelFood;
     $sets[] = 'food_fee=?';       $vals[] = $foodFee;
+    // Photo upload — পাসপোর্ট সাইজ (200x257 px)
+    if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
+        $allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
+        $mimeType = mime_content_type($_FILES['photo']['tmp_name']);
+        if (!in_array($mimeType, $allowedTypes)) {
+            setFlash('danger', 'শুধু JPG, PNG, GIF বা WebP ছবি upload করুন।');
+            header("Location: edit.php?id=$id"); exit;
+        }
+        if ($_FILES['photo']['size'] > 5 * 1024 * 1024) {
+            setFlash('danger', 'ছবির সাইজ ৫MB এর বেশি হবে না।');
+            header("Location: edit.php?id=$id"); exit;
+        }
+
+        $dir = UPLOAD_PATH . 'students/';
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $photoPath = 'students/' . $student['student_id'] . '.jpg';
+        $dest = UPLOAD_PATH . $photoPath;
+
+        $targetW = 200; $targetH = 257;
+
+        switch ($mimeType) {
+            case 'image/png':  $src = imagecreatefrompng($_FILES['photo']['tmp_name']); break;
+            case 'image/gif':  $src = imagecreatefromgif($_FILES['photo']['tmp_name']); break;
+            case 'image/webp': $src = imagecreatefromwebp($_FILES['photo']['tmp_name']); break;
+            default:           $src = imagecreatefromjpeg($_FILES['photo']['tmp_name']); break;
+        }
+
+        if ($src) {
+            $srcW = imagesx($src); $srcH = imagesy($src);
+            $srcRatio = $srcW / $srcH; $destRatio = $targetW / $targetH;
+            if ($srcRatio > $destRatio) {
+                $cropH = $srcH; $cropW = (int)($srcH * $destRatio);
+                $cropX = (int)(($srcW - $cropW) / 2); $cropY = 0;
+            } else {
+                $cropW = $srcW; $cropH = (int)($srcW / $destRatio);
+                $cropX = 0; $cropY = (int)(($srcH - $cropH) / 2);
+            }
+            $canvas = imagecreatetruecolor($targetW, $targetH);
+            $white = imagecolorallocate($canvas, 255, 255, 255);
+            imagefill($canvas, 0, 0, $white);
+            imagecopyresampled($canvas, $src, 0, 0, $cropX, $cropY, $targetW, $targetH, $cropW, $cropH);
+            imagejpeg($canvas, $dest, 90);
+            imagedestroy($src); imagedestroy($canvas);
+            $sets[] = 'photo=?'; $vals[] = $photoPath;
+        }
+    }
+
     $vals[] = $id;
     $db->prepare("UPDATE students SET ".implode(',',$sets)." WHERE id=?")->execute($vals);
     setFlash('success','তথ্য আপডেট হয়েছে।');
@@ -57,7 +105,7 @@ require_once '../../includes/header.php';
     <h2 class="section-title"><i class="fas fa-edit"></i> ছাত্রের তথ্য সম্পাদনা</h2>
     <a href="view.php?id=<?=$id?>" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> ফিরুন</a>
 </div>
-<form method="POST">
+<form method="POST" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
 <input type="hidden" name="update_student" value="1">
 <div class="card mb-16">
@@ -111,6 +159,17 @@ require_once '../../includes/header.php';
         </div>
         <div class="form-group mt-16"><label>ঠিকানা</label>
             <textarea name="address_present" class="form-control" rows="2"><?=e($student['address_present']??'')?></textarea></div>
+        <div class="form-group mt-16"><label>ছবি (পাসপোর্ট সাইজ)</label>
+            <?php if (!empty($student['photo'])): ?>
+            <div style="margin-bottom:8px;">
+                <img src="<?=BASE_URL?>/assets/uploads/<?=e($student['photo'])?>" 
+                     style="width:80px;height:103px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;">
+                <div style="font-size:11px;color:#718096;margin-top:4px;">বর্তমান ছবি</div>
+            </div>
+            <?php endif; ?>
+            <input type="file" name="photo" class="form-control" accept="image/*">
+            <div style="font-size:11px;color:#718096;margin-top:4px;">নতুন ছবি দিলে পুরানোটা বদলে যাবে। সর্বোচ্চ ৫MB।</div>
+        </div>
     </div>
 </div>
 <div class="card mb-16">

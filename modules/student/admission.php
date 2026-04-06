@@ -64,14 +64,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Roll Number — last roll + 1 for this class
         $rollNo = $db->query("SELECT COALESCE(MAX(roll_number),0)+1 FROM students WHERE class_id=$classId AND academic_year='".date('Y')."'")->fetchColumn();
 
-        // Photo upload
+        // Photo upload — পাসপোর্ট সাইজ (413x531 px)
         $photo = null;
-        if (!empty($_FILES['photo']['name'])) {
-            $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
-            $photo = 'students/' . $studentId . '.' . $ext;
+        if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
+            $allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
+            $mimeType = mime_content_type($_FILES['photo']['tmp_name']);
+            if (!in_array($mimeType, $allowedTypes)) {
+                setFlash('danger', 'শুধু JPG, PNG, GIF বা WebP ছবি upload করুন।');
+                header('Location: admission.php'); exit;
+            }
+            $maxSize = 5 * 1024 * 1024; // 5MB
+            if ($_FILES['photo']['size'] > $maxSize) {
+                setFlash('danger', 'ছবির সাইজ ৫MB এর বেশি হবে না।');
+                header('Location: admission.php'); exit;
+            }
+
             $dir = UPLOAD_PATH . 'students/';
             if (!is_dir($dir)) mkdir($dir, 0755, true);
-            move_uploaded_file($_FILES['photo']['tmp_name'], UPLOAD_PATH . $photo);
+
+            $photo = 'students/' . $studentId . '.jpg';
+            $dest  = UPLOAD_PATH . $photo;
+
+            // পাসপোর্ট সাইজ: 200x257 px
+            $targetW = 200;
+            $targetH = 257;
+
+            // সোর্স ইমেজ load
+            switch ($mimeType) {
+                case 'image/png':  $src = imagecreatefrompng($_FILES['photo']['tmp_name']); break;
+                case 'image/gif':  $src = imagecreatefromgif($_FILES['photo']['tmp_name']); break;
+                case 'image/webp': $src = imagecreatefromwebp($_FILES['photo']['tmp_name']); break;
+                default:           $src = imagecreatefromjpeg($_FILES['photo']['tmp_name']); break;
+            }
+
+            if ($src) {
+                $srcW = imagesx($src);
+                $srcH = imagesy($src);
+
+                // সোর্স ratio অনুযায়ী crop করে পাসপোর্ট সাইজে আনা
+                $srcRatio  = $srcW / $srcH;
+                $destRatio = $targetW / $targetH;
+
+                if ($srcRatio > $destRatio) {
+                    // চওড়া বেশি — height ঠিক রেখে width crop
+                    $cropH = $srcH;
+                    $cropW = (int)($srcH * $destRatio);
+                    $cropX = (int)(($srcW - $cropW) / 2);
+                    $cropY = 0;
+                } else {
+                    // লম্বা বেশি — width ঠিক রেখে height crop
+                    $cropW = $srcW;
+                    $cropH = (int)($srcW / $destRatio);
+                    $cropX = 0;
+                    $cropY = (int)(($srcH - $cropH) / 2);
+                }
+
+                $canvas = imagecreatetruecolor($targetW, $targetH);
+                // সাদা background
+                $white = imagecolorallocate($canvas, 255, 255, 255);
+                imagefill($canvas, 0, 0, $white);
+
+                imagecopyresampled($canvas, $src, 0, 0, $cropX, $cropY, $targetW, $targetH, $cropW, $cropH);
+                imagejpeg($canvas, $dest, 90); // 90% quality
+                imagedestroy($src);
+                imagedestroy($canvas);
+            } else {
+                // GD দিয়ে না হলে সরাসরি সেভ
+                move_uploaded_file($_FILES['photo']['tmp_name'], $dest);
+            }
         }
 
         $stmt = $db->prepare("INSERT INTO students 
