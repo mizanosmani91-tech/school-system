@@ -332,9 +332,15 @@ if (isset($parentLayout) && $parentLayout) {
     <nav class="sidebar-nav">
 
         <!-- ড্যাশবোর্ড -->
+        <?php if ($roleSlug === 'teacher'): ?>
+        <a href="<?= BASE_URL ?>/modules/teacher/dashboard.php" class="nav-item <?= basename($_SERVER['PHP_SELF'])=='dashboard.php'?'active':'' ?>">
+            <i class="fas fa-chart-line"></i> ড্যাশবোর্ড
+        </a>
+        <?php else: ?>
         <a href="<?= BASE_URL ?>/index.php" class="nav-item <?= (basename($_SERVER['PHP_SELF']) == 'index.php' && strpos($_SERVER['PHP_SELF'], 'modules') === false ? 'active' : '') ?>">
             <i class="fas fa-chart-line"></i> ড্যাশবোর্ড
         </a>
+        <?php endif; ?>
 
         <?php if (in_array($roleSlug, ['super_admin','principal','teacher','accountant'])): ?>
 
@@ -373,7 +379,10 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/teacher/list.php" class="nav-item nav-sub">
                     <i class="fas fa-users"></i> শিক্ষক তালিকা
                 </a>
-                <a href="<?= BASE_URL ?>/checkin.php" class="nav-item nav-sub">
+                <a href="<?= BASE_URL ?>/modules/attendance/live_monitor.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='live_monitor.php'?'active':'' ?>">
+                    <i class="fas fa-circle" style="color:#ff4757;font-size:8px;animation:pulse2 1.5s infinite;"></i> লাইভ ক্লাস মনিটর
+                </a>
+                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub">
                     <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
                 </a>
                 <a href="<?= BASE_URL ?>/modules/teacher/teacher_report.php" class="nav-item nav-sub">
@@ -436,6 +445,11 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub">
                     <i class="fas fa-clipboard-list"></i> ছাত্র উপস্থিতি
                 </a>
+                <?php if ($roleSlug === 'teacher'): ?>
+                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='checkin.php'?'active':'' ?>">
+                    <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
+                </a>
+                <?php endif; ?>
                 <a href="<?= BASE_URL ?>/modules/attendance/report.php" class="nav-item nav-sub">
                     <i class="fas fa-chart-pie"></i> উপস্থিতি রিপোর্ট
                 </a>
