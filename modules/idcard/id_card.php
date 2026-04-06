@@ -130,7 +130,15 @@ require_once '../../includes/header.php';
         $nameParts   = explode(' ', $nameEn, 2);
         $firstNameEn = $nameParts[0] ?? '';
         $lastNameEn  = $nameParts[1] ?? '';
-        $photoUrl    = $s['photo'] ? BASE_URL.'/assets/uploads/'.$s['photo'] : '';
+        // photo field এ Cloudinary URL (https://...) অথবা পুরানো local path থাকতে পারে
+        $rawPhoto = $s['photo'] ?? '';
+        if (str_starts_with($rawPhoto, 'http')) {
+            $photoUrl = $rawPhoto; // Cloudinary full URL
+        } elseif ($rawPhoto) {
+            $photoUrl = BASE_URL . '/assets/uploads/' . $rawPhoto; // পুরানো local path
+        } else {
+            $photoUrl = '';
+        }
         $classNameBn = $s['class_name_bn'] ?? '';
         $section     = $s['section_name'] ?? '';
         $roll        = $s['roll_number'] ?? '';
