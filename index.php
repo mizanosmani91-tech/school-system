@@ -189,7 +189,7 @@ require_once 'includes/header.php';
 <div class="card mb-24">
     <div class="card-header">
         <span class="card-title"><i class="fas fa-chalkboard-teacher"></i> আজকের শিক্ষক উপস্থিতি</span>
-        <a href="modules/attendance/checkin.php" class="btn btn-outline btn-sm">বিস্তারিত</a>
+        <a href="modules/payroll/attendance_report.php" class="btn btn-outline btn-sm">বিস্তারিত</a>
     </div>
     <div class="table-wrap">
         <table>
