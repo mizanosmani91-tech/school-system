@@ -125,17 +125,130 @@ require_once '../../includes/header.php';
 <?php if (!empty($students)): ?>
 <div id="cardContainer" style="<?= $printMode ? '' : 'margin-top:24px;' ?>">
     <?php foreach($students as $s):
-        $name     = $s['name_bn'] ?: $s['name'];
-        $nameEn   = $s['name'] ?? '';
-        $photoUrl = $s['photo'] ? BASE_URL.'/'.$s['photo'] : '';
+        $name        = $s['name_bn'] ?: $s['name'];
+        $nameEn      = $s['name'] ?? '';
+        $nameParts   = explode(' ', $nameEn, 2);
+        $firstNameEn = $nameParts[0] ?? '';
+        $lastNameEn  = $nameParts[1] ?? '';
+        $photoUrl    = $s['photo'] ? BASE_URL.'/'.$s['photo'] : '';
         $classNameBn = $s['class_name_bn'] ?? '';
-        $section  = $s['section_name'] ?? '';
-        $roll     = $s['roll_number'] ?? '';
-        $blood    = $s['blood_group'] ?? '';
-        $stuId    = $s['student_id'] ?? '';
-        $father   = $s['father_name_bn'] ?? '';
-        $phone    = $s['father_phone'] ?? $s['guardian_phone'] ?? '';
+        $section     = $s['section_name'] ?? '';
+        $roll        = $s['roll_number'] ?? '';
+        $blood       = $s['blood_group'] ?? '';
+        $stuId       = $s['student_id'] ?? '';
+        $father      = $s['father_name_bn'] ?? '';
+        $phone       = $s['father_phone'] ?? $s['guardian_phone'] ?? '';
     ?>
+
+    <div class="id-card-pair">
+
+        <!-- ===== পেছনের দিক (Back) ===== -->
+        <div class="id-card card-back">
+            <div class="back-watermark"><i class="fas fa-mosque"></i></div>
+            <div class="back-content">
+                <h3 class="back-title">Terms and Condition</h3>
+                <p class="back-text">This ID card must be brought and worn whenever the student attends the madrasah. If this card is lost, the student or guardian must inform the office immediately. If anyone finds this card, please return it to An Nazah Tahfizul Quran Madrasah. Misuse, lending, or altering this card in any way is strictly prohibited.</p>
+
+                <div class="back-bottom">
+                    <div class="back-qr">
+                        <!-- QR placeholder -->
+                        <div class="qr-box">
+                            <svg viewBox="0 0 100 100" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+                                <rect x="5" y="5" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
+                                <rect x="12" y="12" width="21" height="21" rx="1" fill="#e67e22"/>
+                                <rect x="60" y="5" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
+                                <rect x="67" y="12" width="21" height="21" rx="1" fill="#e67e22"/>
+                                <rect x="5" y="60" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
+                                <rect x="12" y="67" width="21" height="21" rx="1" fill="#e67e22"/>
+                                <rect x="55" y="55" width="8" height="8" fill="#333"/>
+                                <rect x="67" y="55" width="8" height="8" fill="#333"/>
+                                <rect x="79" y="55" width="8" height="8" fill="#333"/>
+                                <rect x="91" y="55" width="8" height="8" fill="#333"/>
+                                <rect x="55" y="67" width="8" height="8" fill="#333"/>
+                                <rect x="79" y="67" width="8" height="8" fill="#333"/>
+                                <rect x="55" y="79" width="8" height="8" fill="#333"/>
+                                <rect x="67" y="79" width="8" height="8" fill="#333"/>
+                                <rect x="91" y="79" width="8" height="8" fill="#333"/>
+                                <rect x="55" y="91" width="8" height="8" fill="#333"/>
+                                <rect x="79" y="91" width="8" height="8" fill="#333"/>
+                            </svg>
+                        </div>
+                        <div class="back-sig">
+                            <div class="sig-line"></div>
+                            <div class="sig-text">Principal's Signature</div>
+                        </div>
+                    </div>
+                    <div class="back-address">
+                        <p><?= e($instituteAddress) ?></p>
+                        <p style="margin-top:5px;font-weight:700;">Mobile: <?= e($institutePhone) ?></p>
+                        <p style="font-weight:700;"><?= e($instituteWeb) ?></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== সামনের দিক (Front) ===== -->
+        <div class="id-card card-front">
+            <!-- বাম পাশের সবুজ-কমলা diagonal strip -->
+            <div class="front-strip">
+                <div class="strip-green"></div>
+                <div class="strip-orange"></div>
+                <div class="strip-label">STUDENT ID CARD</div>
+            </div>
+
+            <!-- মূল কন্টেন্ট -->
+            <div class="front-body">
+                <!-- লোগো ও নাম -->
+                <div class="front-header">
+                    <?php if($logoPath): ?>
+                    <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" alt="logo">
+                    <?php else: ?>
+                    <div class="front-logo-placeholder"><i class="fas fa-mosque"></i></div>
+                    <?php endif; ?>
+                    <div class="front-institute">
+                        <div class="front-institute-arabic">مدرسة النجاح لتحفيظ القرآن</div>
+                        <div class="front-institute-bn"><?= e($instituteName) ?></div>
+                    </div>
+                </div>
+
+                <!-- ছাত্রের ছবি -->
+                <div class="front-photo-wrap">
+                    <?php if($photoUrl): ?>
+                    <img src="<?= $photoUrl ?>" class="front-photo" alt="photo">
+                    <?php else: ?>
+                    <div class="front-photo-avatar"><?= mb_substr($name, 0, 1) ?></div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- নাম ও তথ্য -->
+                <div class="front-name">
+                    <span class="name-first"><?= e($firstNameEn ?: $name) ?></span>
+                    <?php if($lastNameEn): ?>
+                    <span class="name-last"> <?= e($lastNameEn) ?></span>
+                    <?php endif; ?>
+                </div>
+                <div class="front-id">ID: <?= e($stuId) ?></div>
+
+                <div class="front-table">
+                    <div class="front-row"><span class="fr-label">Class</span><span class="fr-val">:<?= e($classNameBn) ?></span></div>
+                    <?php if($section): ?>
+                    <div class="front-row"><span class="fr-label">Group</span><span class="fr-val">:<?= e($section) ?></span></div>
+                    <?php endif; ?>
+                    <div class="front-row"><span class="fr-label">Roll</span><span class="fr-val">:<?= e($roll) ?></span></div>
+                    <div class="front-row"><span class="fr-label">Blood</span><span class="fr-val">:<?= e($blood ?: 'N/A') ?></span></div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    <?php endforeach; ?>
+</div>
+<?php elseif (!$printMode): ?>
+<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-muted);">
+    <i class="fas fa-id-card" style="font-size:48px;margin-bottom:16px;opacity:.3;"></i>
+    <p style="font-size:16px;">শ্রেণী নির্বাচন করুন অথবা ছাত্র বেছে নিন</p>
+</div></div>
+<?php endif; ?>
 
     <?php if ($design === 'modern'): ?>
     <!-- ===== ডিজাইন ১: মডার্ন ===== -->
@@ -352,96 +465,243 @@ require_once '../../includes/header.php';
 <?php endif; ?>
 
 <style>
-/* CR80: 85.6mm × 54mm = 323px × 204px at 96dpi */
-.id-card-wrap {
-    display: inline-block;
-    margin: 8px;
+@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
+
+/* ===== CARD PAIR (Front + Back side by side) ===== */
+.id-card-pair {
+    display: inline-flex;
+    gap: 12px;
+    margin: 10px;
     vertical-align: top;
 }
+
+/* CR80 Portrait: 54mm × 85.6mm = 204px × 323px at 96dpi */
 .id-card {
-    width: 323px;
-    height: 204px;
+    width: 204px;
+    height: 323px;
     border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0,0,0,.2);
+    box-shadow: 0 6px 24px rgba(0,0,0,.18);
     position: relative;
     font-family: 'Hind Siliguri', sans-serif;
 }
 
-/* ===== MODERN ===== */
-.modern-card { background: #fff; }
-.modern-header {
-    background: linear-gradient(135deg, #1a5276 60%, #e67e22 100%);
-    height: 62px;
+/* ===== FRONT ===== */
+.card-front {
+    background: #fff;
+    display: flex;
+}
+
+/* বাম strip */
+.front-strip {
+    width: 30px;
     position: relative;
+    flex-shrink: 0;
     overflow: hidden;
-    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.strip-green {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 55%;
+    background: #1a8a3c;
+    clip-path: polygon(0 0, 100% 0, 100% 85%, 0 100%);
+}
+.strip-orange {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 55%;
+    background: #e67e22;
+    clip-path: polygon(0 15%, 100% 0, 100% 100%, 0 100%);
+}
+.strip-label {
+    position: relative;
+    z-index: 2;
+    color: #fff;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+}
+
+/* মূল কন্টেন্ট */
+.front-body {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    padding: 8px 8px 8px 6px;
 }
-.modern-diagonal {
-    position: absolute;
-    right: -20px; top: -10px;
-    width: 80px; height: 90px;
-    background: rgba(255,255,255,.1);
-    transform: rotate(20deg);
-}
-.modern-header-content { display:flex;align-items:center;gap:6px;position:relative;z-index:1; }
-.modern-logo { width:28px;height:28px;object-fit:contain; }
-.modern-logo-placeholder { width:28px;height:28px;background:rgba(255,255,255,.2);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px; }
-.modern-institute-bn { font-size:7.5px;font-weight:700;color:#fff;line-height:1.3; }
-.modern-institute-en { font-size:5.5px;color:rgba(255,255,255,.8); }
-.modern-card-label { font-size:7px;font-weight:700;color:#e67e22;letter-spacing:1px;position:relative;z-index:1; }
-.modern-body { display:flex;gap:10px;padding:8px 10px;flex:1; }
-.modern-photo-wrap { text-align:center; }
-.modern-photo { width:56px;height:70px;object-fit:cover;border-radius:6px;border:2px solid #1a5276; }
-.modern-photo-avatar { width:56px;height:70px;background:#ebf5fb;border-radius:6px;border:2px solid #1a5276;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#1a5276; }
-.modern-blood { background:#e74c3c;color:#fff;font-size:7px;font-weight:700;border-radius:3px;padding:2px 4px;margin-top:3px;text-align:center; }
-.modern-info { flex:1; }
-.modern-name { font-size:11px;font-weight:700;color:#1a5276;margin-bottom:1px; }
-.modern-name-en { font-size:7px;color:#888;margin-bottom:5px; }
-.modern-table { font-size:7.5px;line-height:1.7;color:#333;width:100%; }
-.modern-table td:first-child { color:#1a5276;font-weight:600;width:38px;white-space:nowrap; }
-.modern-footer {
-    background: linear-gradient(90deg, #0e2f44, #1a5276);
-    padding: 5px 10px;
+.front-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 5px;
+    border-bottom: 2px solid #1a8a3c;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
 }
-.modern-footer-info { font-size:5.5px;color:rgba(255,255,255,.8);flex:1; }
-.modern-sig-line { width:55px;border-top:1px solid rgba(255,255,255,.6);margin-bottom:2px; }
+.front-logo {
+    width: 32px; height: 32px;
+    object-fit: contain; flex-shrink: 0;
+}
+.front-logo-placeholder {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg,#1a8a3c,#e67e22);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 15px; flex-shrink: 0;
+}
+.front-institute { flex: 1; }
+.front-institute-arabic {
+    font-size: 7px; color: #1a5276; font-weight: 600;
+    line-height: 1.2; direction: rtl;
+}
+.front-institute-bn {
+    font-size: 6.5px; color: #1a8a3c; font-weight: 700;
+    line-height: 1.3;
+}
 
-/* ===== GREEN ===== */
-.green-card { background: #fff;border:2px solid #27ae60; }
-.green-top-bar { height:6px;background:#27ae60;position:absolute;top:0;left:0;right:0; }
-.green-side-bar { width:6px;background:#27ae60;position:absolute;top:0;left:0;bottom:0; }
-.green-content { padding:10px 10px 8px 14px; }
-.green-header { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
+/* ছবি */
+.front-photo-wrap {
+    text-align: center;
+    margin: 4px 0;
+}
+.front-photo {
+    width: 80px; height: 95px;
+    object-fit: cover;
+    border: 3px solid #e67e22;
+    border-radius: 4px;
+    display: inline-block;
+}
+.front-photo-avatar {
+    width: 80px; height: 95px;
+    background: #f0f8f0;
+    border: 3px solid #e67e22;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 32px; font-weight: 700; color: #1a8a3c;
+}
 
-/* ===== CLASSIC ===== */
-.classic-card { background:#0d2137;display:flex;flex-direction:column; }
-.classic-header { background:linear-gradient(135deg,#0d2137,#1a5276);padding:8px 10px;border-bottom:2px solid #e67e22; }
-.classic-label { font-size:6px;font-weight:700;color:#e67e22;letter-spacing:1.5px;margin-top:3px; }
-.classic-body { display:flex;gap:10px;padding:8px 10px;flex:1; }
-.classic-photo-section { text-align:center; }
-.classic-photo { width:54px;height:68px;object-fit:cover;border-radius:4px;border:2px solid #e67e22; }
-.classic-photo-avatar { width:54px;height:68px;background:#1a3a5c;border-radius:4px;border:2px solid #e67e22;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#e67e22; }
-.classic-info { flex:1; }
-.classic-name { font-size:11px;font-weight:700;color:#fff;margin-bottom:1px; }
-.classic-name-en { font-size:7px;color:#a8c0d4;margin-bottom:4px; }
-.classic-divider { height:1px;background:#e67e22;margin-bottom:5px;opacity:.5; }
-.classic-table { font-size:7px;line-height:1.8;color:#a8c0d4;width:100%; }
-.classic-table td:first-child { color:#e67e22;font-weight:600;width:55px;white-space:nowrap; }
-.classic-footer { background:linear-gradient(90deg,#0d2137,#1a5276);padding:5px 10px;border-top:1px solid rgba(255,165,0,.3);display:flex;justify-content:space-between;align-items:center; }
+/* নাম */
+.front-name {
+    text-align: center;
+    margin-top: 6px;
+    line-height: 1.2;
+}
+.name-first {
+    font-size: 14px; font-weight: 700; color: #1a8a3c;
+    font-family: 'Libre Baskerville', serif;
+}
+.name-last {
+    font-size: 14px; font-weight: 400; color: #333;
+    font-family: 'Libre Baskerville', serif;
+}
+.front-id {
+    text-align: center;
+    font-size: 8.5px; font-weight: 700; color: #555;
+    margin: 2px 0 5px;
+    letter-spacing: 0.5px;
+}
 
-/* ===== MAROON ===== */
-.maroon-card { background:#fff;display:flex; }
-.maroon-left-bar { width:28px;background:#7b1d1d;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
-.maroon-rotated-text { color:#fff;font-size:6px;font-weight:700;letter-spacing:1.5px;white-space:nowrap;transform:rotate(-90deg);width:190px;text-align:center; }
-.maroon-right { flex:1;display:flex;flex-direction:column; }
-.maroon-header { display:flex;align-items:center;gap:6px;padding:7px 8px 5px;border-bottom:2px solid #c0392b; }
+/* তথ্য টেবিল */
+.front-table {
+    border-top: 1px dashed #1a8a3c;
+    padding-top: 5px;
+}
+.front-row {
+    display: flex;
+    font-size: 8px;
+    line-height: 1.8;
+    color: #333;
+}
+.fr-label {
+    width: 38px;
+    color: #1a5276;
+    font-weight: 600;
+}
+.fr-val { flex: 1; }
+
+/* ===== BACK ===== */
+.card-back {
+    background: #fff;
+    border: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+.back-watermark {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    font-size: 90px;
+    color: rgba(26,138,60,.06);
+    pointer-events: none;
+}
+.back-content {
+    padding: 12px 10px 8px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    z-index: 1;
+}
+.back-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a5276;
+    text-align: center;
+    margin-bottom: 7px;
+    font-family: 'Libre Baskerville', serif;
+}
+.back-text {
+    font-size: 6.5px;
+    color: #444;
+    line-height: 1.7;
+    text-align: justify;
+    flex: 1;
+}
+.back-bottom {
+    margin-top: 8px;
+    border-top: 1px solid #e67e22;
+    padding-top: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.back-qr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.qr-box {
+    background: #fff8f0;
+    border: 1px solid #e67e22;
+    border-radius: 4px;
+    padding: 3px;
+}
+.back-sig { text-align: center; }
+.sig-line {
+    width: 60px;
+    border-top: 1px solid #333;
+    margin: 0 auto 2px;
+}
+.sig-text {
+    font-size: 6px;
+    color: #555;
+}
+.back-address {
+    font-size: 6.5px;
+    color: #444;
+    text-align: center;
+    line-height: 1.6;
+}
 
 /* ===== PRINT ===== */
 @media print {
@@ -451,15 +711,12 @@ require_once '../../includes/header.php';
         display: flex;
         flex-wrap: wrap;
         gap: 5mm;
-        padding: 10mm;
+        padding: 5mm;
     }
-    .id-card-wrap {
-        margin: 0;
-        page-break-inside: avoid;
-    }
+    .id-card-pair { margin: 0; }
     .id-card {
         box-shadow: none;
-        border: 1px solid #ddd;
+        border: 1px solid #ccc;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
@@ -469,8 +726,8 @@ require_once '../../includes/header.php';
 }
 
 @page {
-    size: A4;
-    margin: 10mm;
+    size: A4 portrait;
+    margin: 8mm;
 }
 </style>
 
