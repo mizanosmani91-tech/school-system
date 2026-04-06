@@ -226,9 +226,7 @@ function endClass() {
     <div class="card-header"><span class="card-title"><i class="fas fa-bolt"></i> দ্রুত অ্যাকশন</span></div>
     <div class="card-body">
         <div style="display:flex;flex-wrap:wrap;gap:12px;">
-            <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="btn btn-success" style="padding:12px 20px;">
-                <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
-            </a>
+            <!-- চেক ইন বাটনটি এখান থেকে মুছে ফেলা হয়েছে -->
             <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="btn btn-primary" style="padding:12px 20px;">
                 <i class="fas fa-clipboard-check"></i> ছাত্র উপস্থিতি
             </a>
