@@ -48,21 +48,19 @@ $tab = $_GET['tab'] ?? 'overview';
 $notifications = [];
 $unreadNotifCount = 0;
 if ($activeStudentId) {
-    $notifStmt = $db->prepare("SELECT pn.*, s.subject_name_bn, t.name_bn as teacher_name_bn
-        FROM parent_notifications pn
-        LEFT JOIN subjects s ON pn.subject_id = s.id
-        LEFT JOIN teachers t ON pn.teacher_id = t.id
-        WHERE pn.student_id = ? ORDER BY pn.created_at DESC LIMIT 20");
-    $notifStmt->execute([$activeStudentId]);
-    $notifications = $notifStmt->fetchAll();
+    try {
+        $notifStmt = $db->prepare("SELECT pn.*, s.subject_name_bn, t.name_bn as teacher_name_bn FROM parent_notifications pn LEFT JOIN subjects s ON pn.subject_id = s.id LEFT JOIN teachers t ON pn.teacher_id = t.id WHERE pn.student_id = ? ORDER BY pn.created_at DESC LIMIT 20");
+        $notifStmt->execute([$activeStudentId]);
+        $notifications = $notifStmt->fetchAll();
 
-    $unreadStmt = $db->prepare("SELECT COUNT(*) FROM parent_notifications WHERE student_id=? AND is_read=0");
-    $unreadStmt->execute([$activeStudentId]);
-    $unreadNotifCount = $unreadStmt->fetchColumn();
+        $unreadStmt = $db->prepare("SELECT COUNT(*) FROM parent_notifications WHERE student_id=? AND is_read=0");
+        $unreadStmt->execute([$activeStudentId]);
+        $unreadNotifCount = $unreadStmt->fetchColumn();
 
-    if ($tab === 'notifications') {
-        $db->prepare("UPDATE parent_notifications SET is_read=1 WHERE student_id=?")->execute([$activeStudentId]);
-    }
+        if ($tab === 'notifications') {
+            $db->prepare("UPDATE parent_notifications SET is_read=1 WHERE student_id=?")->execute([$activeStudentId]);
+        }
+    } catch(Exception $e) {}
 }
 
 // Send message
@@ -84,53 +82,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
 
 // Load data based on tab
 $attendanceData = $examData = $feeData = $noticesData = $messagesData = [];
+$attSummary = ['total'=>0,'present'=>0,'absent'=>0,'late'=>0];
+$totalFeesPaid = 0;
 if ($activeStudent) {
     $today = date('Y-m-d');
     $thisMonth = date('Y-m');
     $thisYear = date('Y');
 
     // Attendance summary
-    $attStmt = $db->prepare("SELECT
-        COUNT(*) as total,
-        SUM(status='present') as present,
-        SUM(status='absent') as absent,
-        SUM(status='late') as late
-        FROM attendance WHERE student_id=? AND date BETWEEN ? AND ?");
-    $attStmt->execute([$activeStudent['id'], "$thisYear-01-01", $today]);
-    $attSummary = $attStmt->fetch();
+    try {
+        $attStmt = $db->prepare("SELECT COUNT(*) as total, SUM(status='present') as present, SUM(status='absent') as absent, SUM(status='late') as late FROM attendance WHERE student_id=? AND date BETWEEN ? AND ?");
+        $attStmt->execute([$activeStudent['id'], "$thisYear-01-01", $today]);
+        $attSummary = $attStmt->fetch();
+    } catch(Exception $e) {}
 
     // Recent attendance
-    $attRecent = $db->prepare("SELECT * FROM attendance WHERE student_id=? ORDER BY date DESC LIMIT 30");
-    $attRecent->execute([$activeStudent['id']]);
-    $attendanceData = $attRecent->fetchAll();
+    try {
+        $attRecent = $db->prepare("SELECT * FROM attendance WHERE student_id=? ORDER BY date DESC LIMIT 30");
+        $attRecent->execute([$activeStudent['id']]);
+        $attendanceData = $attRecent->fetchAll();
+    } catch(Exception $e) {}
 
     // Exam results
-    $examStmt = $db->prepare("SELECT em.*, e.exam_name_bn, s.subject_name_bn FROM exam_marks em
-        JOIN exams e ON em.exam_id=e.id
-        JOIN subjects s ON em.subject_id=s.id
-        WHERE em.student_id=? ORDER BY e.start_date DESC, s.subject_name_bn");
-    $examStmt->execute([$activeStudent['id']]);
-    $examData = $examStmt->fetchAll();
+    try {
+        $examStmt = $db->prepare("SELECT em.*, e.exam_name_bn, s.subject_name_bn FROM exam_marks em JOIN exams e ON em.exam_id=e.id JOIN subjects s ON em.subject_id=s.id WHERE em.student_id=? ORDER BY e.start_date DESC, s.subject_name_bn");
+        $examStmt->execute([$activeStudent['id']]);
+        $examData = $examStmt->fetchAll();
+    } catch(Exception $e) {}
 
     // Fee info
-    $feeStmt = $db->prepare("SELECT fc.*, ft.fee_name_bn FROM fee_collections fc
-        JOIN fee_types ft ON fc.fee_type_id=ft.id
-        WHERE fc.student_id=? ORDER BY fc.payment_date DESC LIMIT 12");
-    $feeStmt->execute([$activeStudent['id']]);
-    $feeData = $feeStmt->fetchAll();
+    try {
+        $feeStmt = $db->prepare("SELECT fc.*, ft.fee_name_bn FROM fee_collections fc JOIN fee_types ft ON fc.fee_type_id=ft.id WHERE fc.student_id=? ORDER BY fc.payment_date DESC LIMIT 12");
+        $feeStmt->execute([$activeStudent['id']]);
+        $feeData = $feeStmt->fetchAll();
+    } catch(Exception $e) {}
 
     // Total fees this year
-    $totalPaid = $db->prepare("SELECT COALESCE(SUM(paid_amount),0) FROM fee_collections WHERE student_id=? AND YEAR(payment_date)=?");
-    $totalPaid->execute([$activeStudent['id'], $thisYear]);
-    $totalFeesPaid = $totalPaid->fetchColumn();
+    try {
+        $totalPaid = $db->prepare("SELECT COALESCE(SUM(paid_amount),0) FROM fee_collections WHERE student_id=? AND YEAR(payment_date)=?");
+        $totalPaid->execute([$activeStudent['id'], $thisYear]);
+        $totalFeesPaid = $totalPaid->fetchColumn();
+    } catch(Exception $e) {}
 
     // Notices
-    $noticesData = $db->query("SELECT * FROM notices WHERE is_published=1 ORDER BY created_at DESC LIMIT 10")->fetchAll();
+    try {
+        $noticesData = $db->query("SELECT * FROM notices WHERE is_published=1 ORDER BY created_at DESC LIMIT 10")->fetchAll();
+    } catch(Exception $e) {}
 
     // Messages
-    $msgStmt = $db->prepare("SELECT * FROM parent_messages WHERE student_id=? ORDER BY created_at DESC LIMIT 20");
-    $msgStmt->execute([$activeStudent['id']]);
-    $messagesData = $msgStmt->fetchAll();
+    try {
+        $msgStmt = $db->prepare("SELECT * FROM parent_messages WHERE student_id=? ORDER BY created_at DESC LIMIT 20");
+        $msgStmt->execute([$activeStudent['id']]);
+        $messagesData = $msgStmt->fetchAll();
+    } catch(Exception $e) {}
 }
 ?>
 <!DOCTYPE html>
