@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
 
     $sets=[]; $vals=[];
     $simpleFields = ['name_bn','name','date_of_birth','gender','religion','blood_group','class_id','section_id',
+                     'roll_number',
                      'father_name','father_phone','mother_name','guardian_phone','address_present',
                      'status','hifz_para_complete','notes'];
     foreach ($simpleFields as $f) {
@@ -148,6 +149,8 @@ require_once '../../includes/header.php';
                     <option value="<?=$sec['id']?>" <?=$student['section_id']==$sec['id']?'selected':''?>><?=e($sec['section_name'])?></option>
                     <?php endforeach; ?>
                 </select></div>
+            <div class="form-group"><label>রোল নম্বর</label>
+                <input type="number" name="roll_number" class="form-control" min="1" value="<?=e($student['roll_number']??'')?>"></div>
             <div class="form-group"><label>অবস্থা</label>
                 <select name="status" class="form-control">
                     <?php foreach(['active'=>'সক্রিয়','inactive'=>'নিষ্ক্রিয়','passed'=>'উত্তীর্ণ','transferred'=>'বদলি'] as $v=>$l): ?>
