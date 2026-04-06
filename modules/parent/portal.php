@@ -69,15 +69,15 @@ if ($activeStudentId) {
 
 // Send message
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
-    $msg = trim($_POST['message'] ?? '');
+    $msg       = trim($_POST['message'] ?? '');
+    $teacherId = (int)($_POST['teacher_id'] ?? 0) ?: null;
     if ($msg && $activeStudentId) {
-        // Get parent phone — from userInfo (old login) or from student record (new login)
         $parentPhone = $userInfo['phone'] ?? '';
         if (!$parentPhone && $activeStudent) {
             $parentPhone = $activeStudent['father_phone'] ?? $activeStudent['guardian_phone'] ?? '';
         }
-        $stmt = $db->prepare("INSERT INTO parent_messages (student_id, parent_phone, message) VALUES (?,?,?)");
-        $stmt->execute([$activeStudentId, $parentPhone, $msg]);
+        $stmt = $db->prepare("INSERT INTO parent_messages (student_id, parent_phone, teacher_id, message) VALUES (?,?,?,?)");
+        $stmt->execute([$activeStudentId, $parentPhone, $teacherId, $msg]);
         setFlash('success', 'আপনার বার্তা পাঠানো হয়েছে।');
     }
     header("Location: portal.php?student_id=$activeStudentId&tab=messages");
@@ -130,9 +130,32 @@ if ($activeStudent) {
     $noticesData = $db->query("SELECT * FROM notices WHERE is_published=1 ORDER BY created_at DESC LIMIT 10")->fetchAll();
 
     // Messages
-    $msgStmt = $db->prepare("SELECT * FROM parent_messages WHERE student_id=? ORDER BY created_at DESC LIMIT 20");
+    $msgStmt = $db->prepare("SELECT pm.*, t.name_bn as teacher_name_bn FROM parent_messages pm
+        LEFT JOIN teachers t ON pm.teacher_id = t.id
+        WHERE pm.student_id=? ORDER BY pm.created_at ASC LIMIT 30");
     $msgStmt->execute([$activeStudent['id']]);
     $messagesData = $msgStmt->fetchAll();
+
+    // Teachers for this class — class teacher + subject teachers + principal/VP
+    $teacherStmt = $db->prepare("
+        SELECT DISTINCT t.id, t.name_bn, t.name, t.designation_bn
+        FROM teachers t
+        WHERE t.is_active = 1
+        AND (
+            t.class_id = ?
+            OR t.id IN (SELECT DISTINCT teacher_id FROM class_subjects WHERE class_id = ?)
+            OR t.designation_bn IN ('প্রধান শিক্ষক','সহকারী প্রধান শিক্ষক','অধ্যক্ষ','উপাধ্যক্ষ','Principal','Vice Principal')
+        )
+        ORDER BY t.designation_bn, t.name_bn
+    ");
+    $teacherStmt->execute([$activeStudent['class_id'], $activeStudent['class_id']]);
+    $classTeachers = $teacherStmt->fetchAll();
+
+    // If no class-specific teachers found, get all active teachers
+    if (empty($classTeachers)) {
+        $allT = $db->query("SELECT id, name_bn, name, designation_bn FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
+        $classTeachers = $allT;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -439,25 +462,45 @@ tbody tr:hover { background: #f7fafc; }
     <div class="card">
         <div class="card-header"><span class="card-title"><i class="fas fa-comments"></i> শিক্ষকের সাথে যোগাযোগ</span></div>
         <div class="card-body">
-            <div class="msg-box" style="min-height:200px;max-height:350px;overflow-y:auto;margin-bottom:16px;">
+            <!-- Message history -->
+            <div class="msg-box" style="min-height:150px;max-height:350px;overflow-y:auto;margin-bottom:16px;padding:8px;">
                 <?php if (empty($messagesData)): ?>
                 <div style="text-align:center;padding:30px;color:#718096;">কোনো বার্তা নেই</div>
-                <?php else: foreach (array_reverse($messagesData) as $m): ?>
-                <div class="msg-item sent">
+                <?php else: foreach ($messagesData as $m): ?>
+                <div class="msg-item <?= $m['parent_phone'] ? 'sent' : 'received' ?>" style="margin-bottom:8px;">
+                    <?php if (!$m['parent_phone'] && $m['teacher_name_bn']): ?>
+                    <div style="font-size:11px;font-weight:700;color:#718096;margin-bottom:3px;">
+                        <i class="fas fa-chalkboard-teacher"></i> <?= e($m['teacher_name_bn']) ?>
+                    </div>
+                    <?php endif; ?>
                     <div><?= nl2br(e($m['message'])) ?></div>
                     <div class="msg-meta"><?= banglaDate($m['created_at']) ?></div>
                 </div>
-                <?php if ($m['reply']): ?>
-                <div class="msg-item received">
-                    <div style="font-size:11px;font-weight:700;color:#718096;margin-bottom:4px;">শিক্ষকের উত্তর:</div>
+                <?php if (!empty($m['reply'])): ?>
+                <div class="msg-item received" style="margin-bottom:8px;">
+                    <div style="font-size:11px;font-weight:700;color:#718096;margin-bottom:3px;">শিক্ষকের উত্তর:</div>
                     <div><?= nl2br(e($m['reply'])) ?></div>
                     <div class="msg-meta"><?= banglaDate($m['replied_at'] ?? '') ?></div>
                 </div>
                 <?php endif; ?>
                 <?php endforeach; endif; ?>
             </div>
+
+            <!-- Send form -->
             <form method="POST">
                 <input type="hidden" name="send_message" value="1">
+                <div style="margin-bottom:10px;">
+                    <label style="font-size:12px;color:#718096;display:block;margin-bottom:5px;">শিক্ষক নির্বাচন করুন</label>
+                    <select name="teacher_id" class="form-control" style="font-size:13px;">
+                        <option value="">শিক্ষক নির্বাচন করুন</option>
+                        <?php foreach ($classTeachers as $t): ?>
+                        <option value="<?= $t['id'] ?>">
+                            <?= e($t['name_bn'] ?? $t['name']) ?>
+                            <?php if ($t['designation_bn']): ?>(<?= e($t['designation_bn']) ?>)<?php endif; ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <textarea name="message" class="form-control" rows="3" placeholder="শিক্ষকের কাছে বার্তা পাঠান..." required></textarea>
                 <button type="submit" class="btn btn-primary" style="margin-top:10px;width:100%;">
                     <i class="fas fa-paper-plane"></i> বার্তা পাঠান
