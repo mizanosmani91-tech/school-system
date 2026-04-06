@@ -382,11 +382,8 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/attendance/live_monitor.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='live_monitor.php'?'active':'' ?>">
                     <i class="fas fa-circle" style="color:#ff4757;font-size:8px;animation:pulse2 1.5s infinite;"></i> লাইভ ক্লাস মনিটর
                 </a>
-                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub">
-                    <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
-                </a>
-                <a href="<?= BASE_URL ?>/modules/teacher/teacher_report.php" class="nav-item nav-sub">
-                    <i class="fas fa-chart-bar"></i> উপস্থিতি রিপোর্ট
+                <a href="<?= BASE_URL ?>/modules/payroll/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
+                    <i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট
                 </a>
             </div>
         </div>
@@ -463,16 +460,27 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub">
                     <i class="fas fa-clipboard-list"></i> ছাত্র উপস্থিতি
                 </a>
-                <?php if ($roleSlug === 'teacher'): ?>
-                <a href="<?= BASE_URL ?>/modules/attendance/checkin.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='checkin.php'?'active':'' ?>">
-                    <i class="fas fa-fingerprint"></i> চেক ইন / চেক আউট
-                </a>
-                <?php endif; ?>
+
                 <a href="<?= BASE_URL ?>/modules/attendance/report.php" class="nav-item nav-sub">
                     <i class="fas fa-chart-pie"></i> উপস্থিতি রিপোর্ট
                 </a>
             </div>
         </div>
+
+        <!-- পেরোল -->
+        <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
+        <div class="nav-group">
+            <div class="nav-group-header" onclick="toggleGroup('payroll')">
+                <span><i class="fas fa-money-check-alt"></i> পেরোল</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-payroll"></i>
+            </div>
+            <div class="nav-group-items" id="group-payroll">
+                <a href="<?= BASE_URL ?>/modules/payroll/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
+                    <i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট
+                </a>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- আর্থিক -->
         <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
@@ -573,7 +581,7 @@ function toggleGroup(id) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const groups = ['students','teachers','academic','classmanage','attendance','finance','comms','system'];
+    const groups = ['students','teachers','academic','classmanage','attendance','payroll','finance','comms','system'];
     const currentPath = window.location.pathname;
     groups.forEach(id => {
         const items = document.getElementById('group-' + id);
