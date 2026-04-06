@@ -7,14 +7,55 @@ $db = getDB();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) { header('Location: list.php'); exit; }
 
-$stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
+$stmt = $db->prepare("SELECT s.*, 
+    c.class_name_bn, c.class_name, c.class_numeric,
+    sec.section_name,
+    ac.class_name_bn AS admission_class_name_bn,
+    ac.class_numeric AS admission_class_numeric
     FROM students s
     LEFT JOIN classes c ON s.class_id=c.id
     LEFT JOIN sections sec ON s.section_id=sec.id
+    LEFT JOIN classes ac ON s.admission_class_id=ac.id
     WHERE s.id=?");
 $stmt->execute([$id]);
 $student = $stmt->fetch();
 if (!$student) { setFlash('danger','ছাত্র পাওয়া যায়নি।'); header('Location: list.php'); exit; }
+
+// ══════════════════════════════════════════════════
+// Current Class Auto-Calculation
+// ভর্তির বছর থেকে এখন পর্যন্ত কত বছর পার হয়েছে
+// সেই অনুযায়ী current class বের করা হচ্ছে
+// ══════════════════════════════════════════════════
+$admYear = !empty($student['admission_year'])
+    ? (int)$student['admission_year']
+    : (int)date('Y', strtotime($student['admission_date'] ?? 'now'));
+
+$currentYear    = (int)date('Y');
+$yearsPassed    = max(0, $currentYear - $admYear);
+$baseNumeric    = (int)($student['admission_class_numeric'] ?? $student['class_numeric'] ?? 1);
+$targetNumeric  = $baseNumeric + $yearsPassed;
+
+// classes table থেকে calculated class নিন
+$calcStmt = $db->prepare("SELECT id, class_name_bn, class_name, class_numeric FROM classes WHERE class_numeric=? AND is_active=1 LIMIT 1");
+$calcStmt->execute([$targetNumeric]);
+$calculatedClass = $calcStmt->fetch();
+
+// যদি calculated class পাওয়া যায় এবং ভর্তির class থেকে আলাদা হয়
+$showCurrentClass   = $calculatedClass && ($calculatedClass['id'] != ($student['admission_class_id'] ?? $student['class_id']));
+$displayClassName   = $calculatedClass
+    ? ($calculatedClass['class_name_bn'] ?? $calculatedClass['class_name'])
+    : ($student['class_name_bn'] ?? $student['class_name']);
+$displayClassId     = $calculatedClass ? $calculatedClass['id'] : $student['class_id'];
+
+// DB তে class_id auto-update করুন (যদি পরিবর্তন হয়েছে)
+if ($showCurrentClass && $calculatedClass['id'] != $student['class_id']) {
+    $db->prepare("UPDATE students SET class_id=?, academic_year=? WHERE id=?")
+       ->execute([$calculatedClass['id'], $currentYear, $id]);
+    $student['class_id']      = $calculatedClass['id'];
+    $student['class_name_bn'] = $calculatedClass['class_name_bn'];
+    $student['class_name']    = $calculatedClass['class_name'];
+}
+// ══════════════════════════════════════════════════
 
 // Attendance summary
 $attStmt = $db->prepare("SELECT
@@ -99,7 +140,15 @@ require_once '../../includes/header.php';
                 <p style="opacity:.8;margin-top:4px;"><?=e($student['name'])?></p>
                 <div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;font-size:13px;opacity:.9;">
                     <span><i class="fas fa-id-card"></i> <?=e($student['student_id'])?></span>
-                    <span><i class="fas fa-school"></i> <?=e($student['class_name_bn'])?> <?=e($student['section_name']??'')?></span>
+                    <span>
+                        <i class="fas fa-school"></i>
+                        <?=e($displayClassName)?> <?=e($student['section_name']??'')?>
+                        <?php if ($showCurrentClass): ?>
+                            <span style="font-size:11px;background:rgba(255,255,255,.2);border-radius:4px;padding:1px 6px;margin-left:4px;">
+                                ভর্তি: <?=e($student['admission_class_name_bn'] ?? '')?>
+                            </span>
+                        <?php endif; ?>
+                    </span>
                     <span><i class="fas fa-hashtag"></i> রোল: <?=toBanglaNumber($student['roll_number']??'')?></span>
                     <span><i class="fas fa-calendar"></i> ভর্তি: <?=banglaDate($student['admission_date']??'')?></span>
                 </div>

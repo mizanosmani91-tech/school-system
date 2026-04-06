@@ -134,16 +134,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // ভর্তির বছর — admission_date থেকে নেওয়া (date('Y') নয়)
+        // যেমন: কেউ ২০২৫ সালে ভর্তি হলেও আজকে add করলে admission_year = 2025 হবে
+        $admissionYear = $admDate ? (int)date('Y', strtotime($admDate)) : (int)date('Y');
+
         $stmt = $db->prepare("INSERT INTO students 
             (student_id, roll_number, name, name_bn, date_of_birth, gender, religion, blood_group,
-             class_id, section_id, academic_year, admission_date, father_name, father_name_en, father_phone,
+             class_id, admission_class_id, section_id, academic_year, admission_year, admission_date,
+             father_name, father_name_en, father_phone,
              mother_name, mother_name_en, mother_phone, guardian_phone, address_present, 
              previous_school, birth_certificate_no, photo, secret_code, status,
              monthly_fee, is_hostel, hostel_fee, is_hostel_food, food_fee, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
         $stmt->execute([
             $studentId, $rollNo, $name, $nameBn, $dob ?: null, $gender, $religion, $bloodGroup,
-            $classId, $sectionId, date('Y'), $admDate, $fatherName, $fatherNameEn, $fatherPhone,
+            $classId, $classId, $sectionId, date('Y'), $admissionYear, $admDate,
+            $fatherName, $fatherNameEn, $fatherPhone,
             $motherName, $motherNameEn, $motherPhone, $guardianPhone, $address,
             $prevSchool, $birthCert, $photo, $secretCode, 'active',
             $monthlyFee, $isHostel, $hostelFee, $isHostelFood, $foodFee
