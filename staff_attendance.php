@@ -8,8 +8,14 @@ $ALLOWED_IPS = [
     '127.0.0.1',
     '::1',
 ];
+
 $userIp = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
-if (str_contains($userIp, ',')) $userIp = trim(explode(',', $userIp)[0]);
+
+// PHP 7 সাপোর্ট করার জন্য strpos ব্যবহার করা হলো
+if (strpos($userIp, ',') !== false) {
+    $userIp = trim(explode(',', $userIp)[0]);
+}
+
 $isAllowedIP = in_array($userIp, $ALLOWED_IPS);
 
 // ===== AJAX CHECK IN / CHECK OUT LOGIC =====
