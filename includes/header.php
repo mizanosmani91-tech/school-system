@@ -392,16 +392,19 @@ if (isset($parentLayout) && $parentLayout) {
         </div>
         <?php endif; ?>
 
-        <!-- হোস্টেল -->
-        <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
+        <!-- আইডি কার্ড -->
+        <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
         <div class="nav-group">
-            <div class="nav-group-header" onclick="toggleGroup('hostel')">
-                <span><i class="fas fa-building"></i> হোস্টেল</span>
-                <i class="fas fa-chevron-down nav-arrow" id="arrow-hostel"></i>
+            <div class="nav-group-header" onclick="toggleGroup('idcard')">
+                <span><i class="fas fa-id-card"></i> আইডি কার্ড</span>
+                <i class="fas fa-chevron-down nav-arrow" id="arrow-idcard"></i>
             </div>
-            <div class="nav-group-items" id="group-hostel">
-                <a href="<?= BASE_URL ?>/modules/hostel/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-th-large"></i> হোস্টেল ম্যানেজমেন্ট
+            <div class="nav-group-items" id="group-idcard">
+                <a href="<?= BASE_URL ?>/modules/idcard/id_card.php?type=student" class="nav-item nav-sub">
+                    <i class="fas fa-user-graduate"></i> ছাত্র আইডি কার্ড
+                </a>
+                <a href="<?= BASE_URL ?>/modules/idcard/id_card.php?type=teacher" class="nav-item nav-sub">
+                    <i class="fas fa-chalkboard-teacher"></i> শিক্ষক আইডি কার্ড
                 </a>
             </div>
         </div>
@@ -570,7 +573,7 @@ function toggleGroup(id) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const groups = ['students','teachers','hostel','academic','classmanage','attendance','finance','comms','system'];
+    const groups = ['students','teachers','academic','classmanage','attendance','finance','comms','system'];
     const currentPath = window.location.pathname;
     groups.forEach(id => {
         const items = document.getElementById('group-' + id);
