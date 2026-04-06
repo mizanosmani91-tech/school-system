@@ -1,6 +1,6 @@
 <?php
 require_once '../../includes/functions.php';
-requireLogin();
+requireLogin(['super_admin','principal']);
 $pageTitle = 'লাইভ ক্লাস মনিটর';
 $db = getDB();
 
@@ -162,69 +162,7 @@ require_once '../../includes/header.php';
 .empty-state { text-align:center; padding:40px 20px; color:var(--text-muted); }
 </style>
 
-<!-- Teacher Panel: ক্লাস শুরু/শেষ করুন -->
-<?php if ($teacher): ?>
-<div class="card mb-24">
-    <div class="card-header" style="background:<?=$myOngoing?'#27ae60':'var(--primary)'?>;color:#fff;">
-        <span style="font-weight:700;font-size:16px;">
-            <i class="fas fa-chalkboard-teacher"></i>
-            <?=$myOngoing?'✅ ক্লাস চলছে':'আপনার ক্লাস'?>
-        </span>
-        <?php if($myOngoing): ?>
-        <span class="live-badge">LIVE</span>
-        <?php endif; ?>
-    </div>
-    <div class="card-body">
-        <?php if ($myOngoing): ?>
-        <!-- Ongoing class info -->
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-            <div style="flex:1;">
-                <div style="font-size:20px;font-weight:700;color:var(--success);"><?=e($myOngoing['class_name_bn'])?></div>
-                <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">
-                    বিষয়: <?=e($myOngoing['subject_name_bn']??'উল্লেখ নেই')?> &bull;
-                    শুরু: <strong><?=date('h:i A',strtotime($myOngoing['started_at']))?></strong>
-                </div>
-                <div style="font-size:13px;color:var(--success);margin-top:6px;" id="ongoingTimer">
-                    ⏱ চলছে...
-                </div>
-            </div>
-            <button onclick="endClass()" class="btn btn-danger" style="padding:12px 24px;font-size:15px;">
-                <i class="fas fa-stop-circle"></i> ক্লাস শেষ করুন
-            </button>
-        </div>
-        <?php else: ?>
-        <!-- Start class form -->
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
-            <div class="form-group" style="flex:1;min-width:160px;margin:0;">
-                <label style="font-size:12px;">শ্রেণী নির্বাচন করুন *</label>
-                <select id="startClassId" class="form-control" style="padding:8px;">
-                    <option value="">শ্রেণী নির্বাচন করুন</option>
-                    <?php foreach($classes as $c): ?>
-                    <option value="<?=$c['id']?>"><?=e($c['class_name_bn'])?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group" style="flex:1;min-width:160px;margin:0;">
-                <label style="font-size:12px;">বিষয় (ঐচ্ছিক)</label>
-                <select id="startSubjectId" class="form-control" style="padding:8px;">
-                    <option value="">বিষয় নির্বাচন করুন</option>
-                    <?php foreach($subjects as $s): ?>
-                    <option value="<?=$s['id']?>"><?=e($s['subject_name_bn'])?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <button onclick="startClass()" class="btn btn-success" style="padding:12px 24px;font-size:15px;">
-                <i class="fas fa-play-circle"></i> ক্লাস শুরু করুন
-            </button>
-        </div>
-        <?php endif; ?>
-    </div>
-</div>
-<?php endif; ?>
-
-<!-- Principal Dashboard: Live View -->
-<?php if(in_array($_SESSION['role_slug'],['super_admin','principal','teacher'])): ?>
-
+<!-- Admin: Live View -->
 <div style="display:grid;gap:8px;margin-bottom:16px;">
     <div style="display:flex;align-items:center;gap:8px;">
         <span style="width:10px;height:10px;background:var(--success);border-radius:50%;"></span>
@@ -258,8 +196,6 @@ require_once '../../includes/header.php';
 
 <script>
 const csrf = '<?=getCsrfToken()?>';
-const isTeacher = <?=$teacher?'true':'false'?>;
-const ongoingStarted = <?=$myOngoing?json_encode($myOngoing['started_at']):'null'?>;
 
 // Live clock
 setInterval(() => {
@@ -267,46 +203,6 @@ setInterval(() => {
     document.getElementById('liveTime').textContent =
         now.toLocaleTimeString('bn-BD', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }, 1000);
-
-// Ongoing timer
-if (ongoingStarted) {
-    setInterval(() => {
-        const start = new Date(ongoingStarted.replace(' ','T'));
-        const diff = Math.floor((new Date() - start) / 1000);
-        const h = Math.floor(diff/3600);
-        const m = Math.floor((diff%3600)/60);
-        const s = diff % 60;
-        const el = document.getElementById('ongoingTimer');
-        if (el) el.textContent = `⏱ ${h?h+'ঘণ্টা ':''} ${m}মিনিট ${s}সেকেন্ড চলছে`;
-    }, 1000);
-}
-
-function startClass() {
-    const classId = document.getElementById('startClassId').value;
-    if (!classId) { alert('শ্রেণী নির্বাচন করুন'); return; }
-    const subjectId = document.getElementById('startSubjectId').value;
-
-    fetch('', {
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({action:'start_class', class_id:classId, subject_id:subjectId, csrf})
-    }).then(r=>r.json()).then(d => {
-        if (d.success) location.reload();
-        else alert(d.msg);
-    });
-}
-
-function endClass() {
-    if (!confirm('ক্লাস শেষ করবেন?')) return;
-    fetch('', {
-        method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body: new URLSearchParams({action:'end_class', csrf})
-    }).then(r=>r.json()).then(d => {
-        if (d.success) location.reload();
-        else alert(d.msg);
-    });
-}
 
 // Load live data
 function loadLiveData() {
