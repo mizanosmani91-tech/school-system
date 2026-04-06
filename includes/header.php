@@ -365,6 +365,9 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item nav-sub">
                     <i class="fas fa-file-excel"></i> বাল্ক ভর্তি
                 </a>
+                <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='index.php' && strpos($_SERVER['PHP_SELF'],'attendance')!==false ?'active':'' ?>">
+                    <i class="fas fa-clipboard-check"></i> ছাত্র উপস্থিতি
+                </a>
             </div>
         </div>
 
@@ -382,7 +385,7 @@ if (isset($parentLayout) && $parentLayout) {
                 <a href="<?= BASE_URL ?>/modules/attendance/live_monitor.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='live_monitor.php'?'active':'' ?>">
                     <i class="fas fa-circle" style="color:#ff4757;font-size:8px;animation:pulse2 1.5s infinite;"></i> লাইভ ক্লাস মনিটর
                 </a>
-                <a href="<?= BASE_URL ?>/modules/payroll/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
+                <a href="<?= BASE_URL ?>/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
                     <i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট
                 </a>
             </div>
@@ -449,38 +452,6 @@ if (isset($parentLayout) && $parentLayout) {
                 </a>
             </div>
         </div>
-
-        <!-- উপস্থিতি -->
-        <div class="nav-group">
-            <div class="nav-group-header" onclick="toggleGroup('attendance')">
-                <span><i class="fas fa-clipboard-check"></i> উপস্থিতি</span>
-                <i class="fas fa-chevron-down nav-arrow" id="arrow-attendance"></i>
-            </div>
-            <div class="nav-group-items" id="group-attendance">
-                <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-clipboard-list"></i> ছাত্র উপস্থিতি
-                </a>
-
-                <a href="<?= BASE_URL ?>/modules/attendance/report.php" class="nav-item nav-sub">
-                    <i class="fas fa-chart-pie"></i> উপস্থিতি রিপোর্ট
-                </a>
-            </div>
-        </div>
-
-        <!-- পেরোল -->
-        <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
-        <div class="nav-group">
-            <div class="nav-group-header" onclick="toggleGroup('payroll')">
-                <span><i class="fas fa-money-check-alt"></i> পেরোল</span>
-                <i class="fas fa-chevron-down nav-arrow" id="arrow-payroll"></i>
-            </div>
-            <div class="nav-group-items" id="group-payroll">
-                <a href="<?= BASE_URL ?>/modules/payroll/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
-                    <i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট
-                </a>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <!-- আর্থিক -->
         <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
@@ -581,7 +552,7 @@ function toggleGroup(id) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const groups = ['students','teachers','academic','classmanage','attendance','payroll','finance','comms','system'];
+    const groups = ['students','teachers','academic','classmanage','finance','comms','system'];
     const currentPath = window.location.pathname;
     groups.forEach(id => {
         const items = document.getElementById('group-' + id);
