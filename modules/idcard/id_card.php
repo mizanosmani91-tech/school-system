@@ -188,12 +188,18 @@ require_once '../../includes/header.php';
         </div>
 
         <!-- ===== সামনের দিক (Front) ===== -->
-        <div class="id-card card-front">
+        <div class="id-card card-front <?= $type ?>">
             <!-- বাম পাশের সবুজ-কমলা diagonal strip -->
             <div class="front-strip">
                 <div class="strip-green"></div>
                 <div class="strip-orange"></div>
-                <div class="strip-label">STUDENT ID CARD</div>
+                <div class="strip-label">
+                    <?php
+                    if ($type === 'teacher') echo 'TEACHER ID CARD';
+                    elseif ($type === 'staff') echo 'STAFF ID CARD';
+                    else echo 'STUDENT ID CARD';
+                    ?>
+                </div>
             </div>
 
             <!-- মূল কন্টেন্ট -->
@@ -230,12 +236,19 @@ require_once '../../includes/header.php';
                 <div class="front-id">ID: <?= e($stuId) ?></div>
 
                 <div class="front-table">
+                    <?php if ($type === 'teacher' || $type === 'staff'): ?>
+                    <div class="front-row"><span class="fr-label">পদবী</span><span class="fr-val">:<?= e($s['designation_bn'] ?? '-') ?></span></div>
+                    <div class="front-row"><span class="fr-label">ID</span><span class="fr-val">:<?= e($stuId) ?></span></div>
+                    <div class="front-row"><span class="fr-label">Phone</span><span class="fr-val">:<?= e($phone) ?></span></div>
+                    <div class="front-row"><span class="fr-label">Blood</span><span class="fr-val">:<?= e($blood ?: 'N/A') ?></span></div>
+                    <?php else: ?>
                     <div class="front-row"><span class="fr-label">Class</span><span class="fr-val">:<?= e($classNameBn) ?></span></div>
                     <?php if($section): ?>
                     <div class="front-row"><span class="fr-label">Group</span><span class="fr-val">:<?= e($section) ?></span></div>
                     <?php endif; ?>
                     <div class="front-row"><span class="fr-label">Roll</span><span class="fr-val">:<?= e($roll) ?></span></div>
                     <div class="front-row"><span class="fr-label">Blood</span><span class="fr-val">:<?= e($blood ?: 'N/A') ?></span></div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -305,14 +318,14 @@ require_once '../../includes/header.php';
     position: relative;
     z-index: 2;
     color: #fff;
-    font-size: 7px;
+    font-size: 9px;
     font-weight: 700;
-    letter-spacing: 1.5px;
+    letter-spacing: 2px;
     writing-mode: vertical-rl;
     text-orientation: mixed;
     transform: rotate(180deg);
     white-space: nowrap;
-    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    text-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 
 /* মূল কন্টেন্ট */
@@ -341,14 +354,14 @@ require_once '../../includes/header.php';
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 15px; flex-shrink: 0;
 }
-.front-institute { flex: 1; }
+.front-institute { flex: 1; text-align: center; }
 .front-institute-arabic {
-    font-size: 7px; color: #1a5276; font-weight: 600;
-    line-height: 1.2; direction: rtl;
+    font-size: 7.5px; color: #1a5276; font-weight: 600;
+    line-height: 1.3; direction: rtl; text-align: center;
 }
 .front-institute-bn {
     font-size: 6.5px; color: #1a8a3c; font-weight: 700;
-    line-height: 1.3;
+    line-height: 1.3; text-align: center;
 }
 
 /* ছবি */
@@ -487,6 +500,32 @@ require_once '../../includes/header.php';
     text-align: center;
     line-height: 1.6;
 }
+
+/* ===== TEACHER CARD — নীল-সোনালি ===== */
+.card-front.teacher .strip-green { background: #1a3a6b; }
+.card-front.teacher .strip-orange { background: #c9a227; }
+.card-front.teacher .front-header { border-bottom-color: #1a3a6b; }
+.card-front.teacher .front-institute-arabic { color: #1a3a6b; }
+.card-front.teacher .front-institute-bn { color: #c9a227; }
+.card-front.teacher .front-photo { border-color: #c9a227; }
+.card-front.teacher .front-photo-avatar { background: #eef2f8; border-color: #c9a227; color: #1a3a6b; }
+.card-front.teacher .front-logo-placeholder { background: linear-gradient(135deg,#1a3a6b,#c9a227); }
+.card-front.teacher .name-first { color: #1a3a6b; }
+.card-front.teacher .fr-label { color: #1a3a6b; }
+.card-front.teacher .front-table { border-top-color: #c9a227; }
+
+/* ===== STAFF CARD — বেগুনি-রুপালি ===== */
+.card-front.staff .strip-green { background: #5b2c8c; }
+.card-front.staff .strip-orange { background: #8e44ad; }
+.card-front.staff .front-header { border-bottom-color: #5b2c8c; }
+.card-front.staff .front-institute-arabic { color: #5b2c8c; }
+.card-front.staff .front-institute-bn { color: #8e44ad; }
+.card-front.staff .front-photo { border-color: #8e44ad; }
+.card-front.staff .front-photo-avatar { background: #f5eefb; border-color: #8e44ad; color: #5b2c8c; }
+.card-front.staff .front-logo-placeholder { background: linear-gradient(135deg,#5b2c8c,#8e44ad); }
+.card-front.staff .name-first { color: #5b2c8c; }
+.card-front.staff .fr-label { color: #5b2c8c; }
+.card-front.staff .front-table { border-top-color: #8e44ad; }
 
 /* ===== PRINT ===== */
 @media print {
