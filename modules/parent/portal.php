@@ -136,13 +136,13 @@ if ($activeStudent) {
     $msgStmt->execute([$activeStudent['id']]);
     $messagesData = $msgStmt->fetchAll();
 
-    // Teachers for this class — class teacher + subject teachers + principal/VP
+    // Teachers for this class — subject teachers + principal/VP
     $teacherStmt = $db->prepare("
         SELECT DISTINCT t.id, t.name_bn, t.name, t.designation_bn
         FROM teachers t
         WHERE t.is_active = 1
         AND (
-            t.class_id = ?
+            t.id IN (SELECT DISTINCT teacher_id FROM timetable WHERE class_id = ?)
             OR t.id IN (SELECT DISTINCT teacher_id FROM class_subjects WHERE class_id = ?)
             OR t.designation_bn IN ('প্রধান শিক্ষক','সহকারী প্রধান শিক্ষক','অধ্যক্ষ','উপাধ্যক্ষ','Principal','Vice Principal')
         )
@@ -153,8 +153,7 @@ if ($activeStudent) {
 
     // If no class-specific teachers found, get all active teachers
     if (empty($classTeachers)) {
-        $allT = $db->query("SELECT id, name_bn, name, designation_bn FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
-        $classTeachers = $allT;
+        $classTeachers = $db->query("SELECT id, name_bn, name, designation_bn FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
     }
 }
 ?>
