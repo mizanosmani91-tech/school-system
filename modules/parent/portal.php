@@ -67,6 +67,33 @@ if ($activeStudentId) {
     }
 }
 
+// Submit payment request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_payment'])) {
+    $feeTypeId   = (int)$_POST['fee_type_id'];
+    $amount      = (float)$_POST['amount'];
+    $monthYear   = $_POST['month_year'] ?? date('Y-m');
+    $method      = $_POST['payment_method'] ?? 'bkash';
+    $txnId       = trim($_POST['transaction_id'] ?? '');
+    $senderNum   = trim($_POST['sender_number'] ?? '');
+
+    if ($feeTypeId && $amount > 0 && $txnId) {
+        // Check duplicate transaction
+        $dupCheck = $db->prepare("SELECT id FROM fee_payment_requests WHERE transaction_id=?");
+        $dupCheck->execute([$txnId]);
+        if ($dupCheck->fetch()) {
+            setFlash('danger', 'এই Transaction ID আগেই জমা দেওয়া হয়েছে।');
+        } else {
+            $db->prepare("INSERT INTO fee_payment_requests (student_id, fee_type_id, amount, month_year, payment_method, transaction_id, sender_number) VALUES (?,?,?,?,?,?,?)")
+               ->execute([$activeStudentId, $feeTypeId, $amount, $monthYear, $method, $txnId, $senderNum]);
+            setFlash('success', 'পরিশোধের তথ্য জমা হয়েছে! Admin verify করার পর Receipt পাবেন।');
+        }
+    } else {
+        setFlash('danger', 'সকল তথ্য সঠিকভাবে পূরণ করুন।');
+    }
+    header("Location: portal.php?student_id=$activeStudentId&tab=fees");
+    exit;
+}
+
 // Send message
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
     $msg       = trim($_POST['message'] ?? '');
@@ -404,12 +431,124 @@ tbody tr:hover { background: #f7fafc; }
 
     <?php elseif ($tab === 'fees'): ?>
     <!-- FEES -->
-    <div class="stat-mini" style="margin-bottom:16px;text-align:left;padding:16px;">
-        <div style="font-size:22px;font-weight:700;color:var(--success);">৳<?= number_format($totalFeesPaid ?? 0) ?></div>
-        <div style="font-size:12px;color:#718096;">এই বছর মোট পরিশোধ</div>
+    <?php
+    // Load fee types for payment
+    $feeTypeList = $db->query("SELECT * FROM fee_types WHERE is_active=1 ORDER BY fee_category, fee_name_bn")->fetchAll();
+    // Load pending requests
+    $pendingReqs = $db->prepare("SELECT fpr.*, ft.fee_name_bn FROM fee_payment_requests fpr JOIN fee_types ft ON fpr.fee_type_id=ft.id WHERE fpr.student_id=? AND fpr.status='pending' ORDER BY fpr.submitted_at DESC");
+    $pendingReqs->execute([$activeStudent['id']]);
+    $pendingData = $pendingReqs->fetchAll();
+    ?>
+
+    <!-- Summary -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div class="stat-mini">
+            <div class="val" style="color:var(--success);">৳<?= number_format($totalFeesPaid ?? 0) ?></div>
+            <div class="lbl">এই বছর পরিশোধ</div>
+        </div>
+        <div class="stat-mini">
+            <div class="val" style="color:var(--warning);"><?= count($pendingData) ?></div>
+            <div class="lbl">অনুমোদন বাকি</div>
+        </div>
     </div>
+
+    <!-- Pending requests -->
+    <?php if (!empty($pendingData)): ?>
+    <div class="card" style="border-left:4px solid var(--warning);margin-bottom:16px;">
+        <div class="card-header"><span class="card-title"><i class="fas fa-clock"></i> অনুমোদনের অপেক্ষায়</span></div>
+        <div class="card-body" style="padding:0;">
+            <table>
+                <thead><tr><th>ফির ধরন</th><th>পরিমাণ</th><th>পদ্ধতি</th><th>TxID</th><th>তারিখ</th></tr></thead>
+                <tbody>
+                <?php foreach ($pendingData as $pr): ?>
+                <tr>
+                    <td><?= e($pr['fee_name_bn']) ?></td>
+                    <td style="font-weight:700;color:var(--warning);">৳<?= number_format($pr['amount']) ?></td>
+                    <td><span class="badge badge-info"><?= e($pr['payment_method']) ?></span></td>
+                    <td style="font-size:11px;"><?= e($pr['transaction_id']) ?></td>
+                    <td style="font-size:11px;color:#718096;"><?= banglaDate($pr['submitted_at']) ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- Payment form -->
+    <div class="card" style="border-left:4px solid #27ae60;margin-bottom:16px;">
+        <div class="card-header" style="background:#eafaf1;">
+            <span class="card-title" style="color:var(--success);"><i class="fas fa-mobile-alt"></i> bKash / Nagad দিয়ে ফী পরিশোধ</span>
+        </div>
+        <div class="card-body">
+            <!-- Payment instruction -->
+            <div style="background:#fff8f0;border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.8;">
+                <div style="font-weight:700;color:#e67e22;margin-bottom:8px;"><i class="fas fa-info-circle"></i> কীভাবে পরিশোধ করবেন:</div>
+                <div>১. নিচে ফী ধরন ও পরিমাণ select করুন</div>
+                <div>২. আমাদের <strong>bKash/Nagad নম্বরে</strong> Send Money করুন</div>
+                <div>৩. Transaction ID এবং আপনার নম্বর দিন</div>
+                <div>৪. Submit করুন — Admin verify করার পর Receipt পাবেন</div>
+                <div style="margin-top:10px;padding:10px;background:#fff;border-radius:8px;border:1px dashed #e67e22;">
+                    <div><strong>bKash:</strong> <?= e(getSetting('bkash_number','01XXXXXXXXX')) ?></div>
+                    <div><strong>Nagad:</strong> <?= e(getSetting('nagad_number','01XXXXXXXXX')) ?></div>
+                </div>
+            </div>
+
+            <form method="POST">
+                <input type="hidden" name="submit_payment" value="1">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">ফীর ধরন</label>
+                        <select name="fee_type_id" class="form-control" required onchange="setFeeAmount(this)">
+                            <option value="">ফী নির্বাচন করুন</option>
+                            <?php foreach ($feeTypeList as $ft):
+                                // Check custom amount
+                                $customAmt = $db->prepare("SELECT custom_amount FROM student_fee_assignments WHERE student_id=? AND fee_type_id=? AND is_active=1");
+                                $customAmt->execute([$activeStudent['id'], $ft['id']]);
+                                $ca = $customAmt->fetchColumn();
+                                $displayAmt = $ca ?: $ft['amount'];
+                            ?>
+                            <option value="<?= $ft['id'] ?>" data-amount="<?= $displayAmt ?>">
+                                <?= e($ft['fee_name_bn']) ?> (৳<?= number_format($displayAmt) ?>)
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">পরিমাণ (৳)</label>
+                        <input type="number" name="amount" id="feeAmountInput" class="form-control" min="1" required placeholder="পরিমাণ">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">মাস/বছর</label>
+                        <input type="month" name="month_year" class="form-control" value="<?= date('Y-m') ?>">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">পরিশোধের পদ্ধতি</label>
+                        <select name="payment_method" class="form-control" required>
+                            <option value="bkash">bKash</option>
+                            <option value="nagad">Nagad</option>
+                            <option value="rocket">Rocket</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Transaction ID</label>
+                        <input type="text" name="transaction_id" class="form-control" required placeholder="8TXN12345678">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">আপনার নম্বর</label>
+                        <input type="tel" name="sender_number" class="form-control" placeholder="01XXXXXXXXX">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:12px;">
+                    <i class="fas fa-paper-plane"></i> পরিশোধের তথ্য জমা দিন
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Payment history -->
     <div class="card">
-        <div class="card-header"><span class="card-title"><i class="fas fa-money-bill"></i> পরিশোধের ইতিহাস</span></div>
+        <div class="card-header"><span class="card-title"><i class="fas fa-history"></i> পরিশোধের ইতিহাস</span></div>
         <div class="card-body" style="padding:0;">
             <?php if (empty($feeData)): ?>
             <div style="text-align:center;padding:30px;color:#718096;">কোনো পরিশোধ তথ্য নেই</div>
@@ -423,7 +562,13 @@ tbody tr:hover { background: #f7fafc; }
                         <td><?= e($f['fee_name_bn']) ?></td>
                         <td style="font-weight:700;color:var(--success);">৳<?= number_format($f['paid_amount']) ?></td>
                         <td><span class="badge badge-info" style="font-size:10px;"><?= e($f['payment_method']) ?></span></td>
-                        <td style="font-size:11px;color:#718096;"><?= e($f['receipt_number']) ?></td>
+                        <td>
+                            <?php if ($f['receipt_number']): ?>
+                            <a href="<?= BASE_URL ?>/modules/fees/receipt.php?id=<?= $f['id'] ?>" target="_blank" style="color:var(--primary);font-size:11px;">
+                                <i class="fas fa-download"></i> <?= e($f['receipt_number']) ?>
+                            </a>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -431,6 +576,13 @@ tbody tr:hover { background: #f7fafc; }
             <?php endif; ?>
         </div>
     </div>
+
+    <script>
+    function setFeeAmount(sel) {
+        const amt = sel.selectedOptions[0].dataset.amount || '';
+        document.getElementById('feeAmountInput').value = amt;
+    }
+    </script>
 
     <?php elseif ($tab === 'notices'): ?>
     <!-- NOTICES -->
