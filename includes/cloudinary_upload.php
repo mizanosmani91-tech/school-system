@@ -1,59 +1,100 @@
 <?php
-// ===== Cloudinary Upload Helper =====
-// includes/ ফোল্ডারে রাখুন: includes/cloudinary_upload.php
-
-define('CLOUDINARY_CLOUD_NAME', 'dtvfwxwmz');
-define('CLOUDINARY_API_KEY',    '218297424444165');
-define('CLOUDINARY_API_SECRET', 'PHYeQcF8ryKHLfTB4sM8o_SaRmU');
-
 /**
- * Cloudinary তে ছবি upload করে public URL return করে।
- * সফল হলে URL string, ব্যর্থ হলে false।
+ * Cloudinary Upload Helper
+ * ফাইল: includes/cloudinary_upload.php
  *
- * @param string $tmpPath   $_FILES['photo']['tmp_name']
- * @param string $publicId  যেমন: students/ANT-2026-NP4X
- * @return string|false
+ * Credentials আসবে environment variables থেকে:
+ *   CLOUDINARY_CLOUD_NAME
+ *   CLOUDINARY_API_KEY
+ *   CLOUDINARY_API_SECRET
+ *
+ * Railway Dashboard → Variables → এই তিনটা add করুন
  */
-function uploadToCloudinary($tmpPath, $publicId) {
+
+function uploadToCloudinary(string $filePath, string $folder = 'students'): ?string {
+
+    // ===== Credentials লোড =====
+    // আগে environment variable দেখো, না পেলে define করা constant দেখো
+    $cloudName = getenv('CLOUDINARY_CLOUD_NAME')
+        ?: (defined('CLOUDINARY_CLOUD_NAME') ? CLOUDINARY_CLOUD_NAME : '');
+    $apiKey    = getenv('CLOUDINARY_API_KEY')
+        ?: (defined('CLOUDINARY_API_KEY')    ? CLOUDINARY_API_KEY    : '');
+    $apiSecret = getenv('CLOUDINARY_API_SECRET')
+        ?: (defined('CLOUDINARY_API_SECRET') ? CLOUDINARY_API_SECRET : '');
+
+    // Credentials না থাকলে সাথে সাথে bail out
+    if (!$cloudName || !$apiKey || !$apiSecret) {
+        error_log('[Cloudinary] Credentials missing! CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET environment variable set করুন।');
+        return null;
+    }
+
+    // ===== ফাইল চেক =====
+    if (!file_exists($filePath)) {
+        error_log('[Cloudinary] File not found: ' . $filePath);
+        return null;
+    }
+    if (filesize($filePath) === 0) {
+        error_log('[Cloudinary] File is empty: ' . $filePath);
+        return null;
+    }
+
+    // ===== Signature তৈরি =====
     $timestamp = time();
-    // Passport size crop: 200x257
-    $params = [
-        'public_id'  => $publicId,
-        'timestamp'  => $timestamp,
-        'gravity'    => 'face',
-        'crop'       => 'fill',
-        'width'      => 200,
-        'height'     => 257,
-        'quality'    => 'auto',
-        'fetch_format' => 'auto',
+    $params    = [
+        'folder'    => $folder,
+        'timestamp' => $timestamp,
     ];
-
-    // Signature তৈরি
     ksort($params);
-    $sigStr = http_build_query($params) . CLOUDINARY_API_SECRET;
-    $signature = sha1($sigStr);
 
-    // multipart POST data
-    $postFields = $params;
-    $postFields['signature'] = $signature;
-    $postFields['api_key']   = CLOUDINARY_API_KEY;
-    $postFields['file']      = new CURLFile($tmpPath);
+    $sigParts = [];
+    foreach ($params as $k => $v) {
+        $sigParts[] = "$k=$v";
+    }
+    $signature = sha1(implode('&', $sigParts) . $apiSecret);
 
-    $url = 'https://api.cloudinary.com/v1_1/' . CLOUDINARY_CLOUD_NAME . '/image/upload';
+    // ===== cURL দিয়ে আপলোড =====
+    $url = "https://api.cloudinary.com/v1_1/{$cloudName}/image/upload";
+
+    $postFields = [
+        'file'      => new CURLFile($filePath),
+        'folder'    => $folder,
+        'timestamp' => $timestamp,
+        'api_key'   => $apiKey,
+        'signature' => $signature,
+    ];
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => $postFields,
-        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 60,          // ৬০ সেকেন্ড সময় দাও
+        CURLOPT_CONNECTTIMEOUT => 15,          // connect timeout
+        CURLOPT_SSL_VERIFYPEER => true,        // SSL verify রাখো
+        CURLOPT_SSL_VERIFYHOST => 2,
     ]);
+
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr  = curl_error($ch);
+    $curlErrNo= curl_errno($ch);
     curl_close($ch);
 
-    if ($httpCode !== 200) return false;
+    // cURL level error
+    if ($curlErr) {
+        error_log("[Cloudinary] cURL error ({$curlErrNo}): {$curlErr}");
+        return null;
+    }
 
+    // HTTP response parse
     $data = json_decode($response, true);
-    return $data['secure_url'] ?? false;
+
+    if ($httpCode === 200 && !empty($data['secure_url'])) {
+        return $data['secure_url']; // ✅ সফল — Cloudinary URL ফেরত দাও
+    }
+
+    // Failure log — Railway logs এ দেখা যাবে
+    $errMsg = $data['error']['message'] ?? $response;
+    error_log("[Cloudinary] Upload failed. HTTP: {$httpCode} | Error: {$errMsg} | Folder: {$folder}");
+    return null;
 }
