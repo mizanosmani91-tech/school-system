@@ -50,10 +50,10 @@ require_once '../../includes/header.php';
 <!-- Filter -->
 <div class="card mb-16 no-print">
     <div class="card-body" style="padding:14px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="filterForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
             <div class="form-group" style="flex:1;min-width:180px;margin:0;">
                 <label style="font-size:12px;">শ্রেণী</label>
-                <select name="class_id" class="form-control form-control-sm" style="padding:7px 10px;">
+                <select name="class_id" class="form-control form-control-sm" style="padding:7px 10px;" onchange="this.form.submit()">
                     <option value="">সব শ্রেণী</option>
                     <?php foreach ($classes as $c): ?>
                     <option value="<?= $c['id'] ?>" <?= $classFilter == $c['id'] ? 'selected':'' ?>><?= e($c['class_name_bn']) ?></option>
@@ -62,7 +62,7 @@ require_once '../../includes/header.php';
             </div>
             <div class="form-group" style="flex:1;min-width:180px;margin:0;">
                 <label style="font-size:12px;">অবস্থা</label>
-                <select name="status" class="form-control" style="padding:7px 10px;">
+                <select name="status" class="form-control" style="padding:7px 10px;" onchange="this.form.submit()">
                     <option value="active" <?= $status=='active'?'selected':'' ?>>সক্রিয়</option>
                     <option value="inactive" <?= $status=='inactive'?'selected':'' ?>>নিষ্ক্রিয়</option>
                     <option value="" <?= $status==''?'selected':'' ?>>সবাই</option>
@@ -70,11 +70,21 @@ require_once '../../includes/header.php';
             </div>
             <div class="form-group" style="flex:2;min-width:220px;margin:0;">
                 <label style="font-size:12px;">অনুসন্ধান</label>
-                <input type="text" name="search" class="form-control" style="padding:7px 10px;" placeholder="নাম, ID, ফোন নম্বর..." value="<?= e($search) ?>">
+                <input type="text" name="search" id="searchInput" class="form-control" style="padding:7px 10px;" placeholder="নাম, ID, ফোন নম্বর..." value="<?= e($search) ?>">
             </div>
             <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-search"></i> খুঁজুন</button>
             <a href="list.php" class="btn btn-outline btn-sm"><i class="fas fa-redo"></i> রিসেট</a>
         </form>
+        <script>
+        // Search input: Enter চাপলে বা ৫০০ms থামলে auto-submit
+        (function(){
+            var t;
+            document.getElementById('searchInput').addEventListener('input', function(){
+                clearTimeout(t);
+                t = setTimeout(function(){ document.getElementById('filterForm').submit(); }, 500);
+            });
+        })();
+        </script>
     </div>
 </div>
 
@@ -109,7 +119,7 @@ require_once '../../includes/header.php';
                             <?php if ($s['photo']): ?>
                             <?php
                             $p = $s['photo'] ?? '';
-                            $pUrl = str_starts_with($p,'http') ? $p : UPLOAD_URL . e($p);
+                            $pUrl = (strpos($p,'http') === 0) ? $p : UPLOAD_URL . e($p);
                             ?>
                             <img src="<?= $pUrl ?>" style="width:36px;height:36px;border-radius:8px;object-fit:cover;">
                             <?php else: ?>
