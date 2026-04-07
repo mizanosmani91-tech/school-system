@@ -41,22 +41,31 @@ $msgType = 'success';
 // ===== SVG/Image আপলোড হ্যান্ডেল =====
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    // লোগো সরানো
+    if (!empty($_POST['remove_logo']) && $_POST['remove_logo'] === '1') {
+        saveIdcs('id_card_logo_b64', '');
+    }
     // লোগো SVG আপলোড
-    if (!empty($_FILES['logo_svg']['tmp_name'])) {
+    elseif (!empty($_FILES['logo_svg']['tmp_name']) && $_FILES['logo_svg']['error'] === UPLOAD_ERR_OK) {
         $ext = strtolower(pathinfo($_FILES['logo_svg']['name'], PATHINFO_EXTENSION));
         if (in_array($ext, ['svg','png','jpg','jpeg','webp'])) {
             $content = file_get_contents($_FILES['logo_svg']['tmp_name']);
-            $b64 = 'data:' . mime_content_type($_FILES['logo_svg']['tmp_name']) . ';base64,' . base64_encode($content);
-            saveIdcs('id_card_logo_b64', $b64);
+            if ($content !== false) {
+                $mime = mime_content_type($_FILES['logo_svg']['tmp_name']);
+                $b64  = 'data:' . $mime . ';base64,' . base64_encode($content);
+                saveIdcs('id_card_logo_b64', $b64);
+            }
         }
     }
+
     // স্ট্রিপ SVG আপলোড
-    if (!empty($_FILES['strip_svg']['tmp_name'])) {
+    if (!empty($_FILES['strip_svg']['tmp_name']) && $_FILES['strip_svg']['error'] === UPLOAD_ERR_OK) {
         $ext = strtolower(pathinfo($_FILES['strip_svg']['name'], PATHINFO_EXTENSION));
         if ($ext === 'svg') {
             $svgContent = file_get_contents($_FILES['strip_svg']['tmp_name']);
-            // শুধু SVG কন্টেন্ট সেভ করব
-            saveIdcs('id_card_strip_svg', $svgContent);
+            if ($svgContent !== false) {
+                saveIdcs('id_card_strip_svg', $svgContent);
+            }
         }
     }
 
@@ -89,10 +98,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             saveIdcs($f, trim($_POST[$f]));
         }
     }
-    $msg = 'সেটিংস সফলভাবে সেভ হয়েছে!';
+    // POST-Redirect-GET: double submit প্রতিরোধ করে
+    header('Location: id_card_settings.php?saved=1');
+    exit;
 }
 
 // ===== বর্তমান মান লোড =====
+$savedMsg = !empty($_GET['saved']) ? 'সেটিংস সফলভাবে সেভ হয়েছে!' : '';
 $cfg = [
     'logo_b64'              => idcs('id_card_logo_b64',''),
     'strip_svg'             => idcs('id_card_strip_svg',''),
@@ -263,8 +275,8 @@ require_once '../../includes/header.php';
 .pv-addr { font-size:6.5px;color:#444;text-align:center;line-height:1.6; }
 </style>
 
-<?php if ($msg): ?>
-<div class="alert alert-<?= $msgType ?>"><i class="fas fa-check-circle"></i> <?= e($msg) ?></div>
+<?php if ($savedMsg): ?>
+<div class="alert alert-success"><i class="fas fa-check-circle"></i> <?= e($savedMsg) ?></div>
 <?php endif; ?>
 
 <div class="section-header">
