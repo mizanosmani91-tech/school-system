@@ -47,8 +47,25 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets[] = 'hostel_fee=?';     $vals[] = $hostelFee;
     $sets[] = 'is_hostel_food=?'; $vals[] = $isHostelFood;
     $sets[] = 'food_fee=?';       $vals[] = $foodFee;
-    // Photo upload — Cloudinary (deploy তে photo টিকে থাকে)
-    if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
+    // Photo upload — Cloudinary
+    $photoCroppedB64 = trim($_POST['photo_cropped'] ?? '');
+    if ($photoCroppedB64 && strpos($photoCroppedB64, 'data:image/') === 0) {
+        $b64Data  = preg_replace('/^data:image\/\w+;base64,/', '', $photoCroppedB64);
+        $imgBytes = base64_decode($b64Data);
+        if ($imgBytes !== false && strlen($imgBytes) > 0) {
+            $tmpPath = tempnam(sys_get_temp_dir(), 'photo_');
+            file_put_contents($tmpPath, $imgBytes);
+            require_once '../../includes/cloudinary_upload.php';
+            $cloudUrl = uploadToCloudinary($tmpPath, 'students/' . $student['student_id']);
+            unlink($tmpPath);
+            if ($cloudUrl) {
+                $sets[] = 'photo=?'; $vals[] = $cloudUrl;
+            } else {
+                setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+                header("Location: edit.php?id=$id"); exit;
+            }
+        }
+    } elseif (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
         $allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
         $mimeType = mime_content_type($_FILES['photo']['tmp_name']);
         if (!in_array($mimeType, $allowedTypes)) {
@@ -62,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
         require_once '../../includes/cloudinary_upload.php';
         $cloudUrl = uploadToCloudinary($_FILES['photo']['tmp_name'], 'students/' . $student['student_id']);
         if ($cloudUrl) {
-            $sets[] = 'photo=?'; $vals[] = $cloudUrl; // Cloudinary URL database এ save হবে
+            $sets[] = 'photo=?'; $vals[] = $cloudUrl;
         } else {
             setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
             header("Location: edit.php?id=$id"); exit;
@@ -137,16 +154,216 @@ require_once '../../includes/header.php';
         <div class="form-group mt-16"><label>ঠিকানা</label>
             <textarea name="address_present" class="form-control" rows="2"><?=e($student['address_present']??'')?></textarea></div>
         <div class="form-group mt-16"><label>ছবি (পাসপোর্ট সাইজ)</label>
-            <?php if (!empty($student['photo'])): ?>
-            <div style="margin-bottom:8px;">
-                <img src="<?=BASE_URL?>/assets/uploads/<?=e($student['photo'])?>" 
-                     style="width:80px;height:103px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;">
-                <div style="font-size:11px;color:#718096;margin-top:4px;">বর্তমান ছবি</div>
+
+            <input type="hidden" name="photo_cropped" id="photoCroppedData">
+
+            <?php
+            $curPhoto = $student['photo'] ?? '';
+            $curPhotoUrl = '';
+            if ($curPhoto) {
+                $curPhotoUrl = (strpos($curPhoto,'http') === 0) ? $curPhoto : BASE_URL.'/assets/uploads/'.e($curPhoto);
+            }
+            ?>
+            <?php if ($curPhotoUrl): ?>
+            <div id="photoPreviewWrap" style="margin-bottom:10px;text-align:left;">
+                <img id="photoPreviewImg" src="<?= $curPhotoUrl ?>" style="width:80px;height:103px;object-fit:cover;border:2px solid var(--primary);border-radius:6px;">
+                <div style="margin-top:6px;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('photoFileInput').click()">
+                        <i class="fas fa-camera"></i> ছবি পরিবর্তন করুন
+                    </button>
+                </div>
             </div>
+            <div id="photoUploadArea" style="display:none;border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);"
+                 onclick="document.getElementById('photoFileInput').click()">
+            <?php else: ?>
+            <div id="photoPreviewWrap" style="display:none;margin-bottom:10px;">
+                <img id="photoPreviewImg" style="width:80px;height:103px;object-fit:cover;border:2px solid var(--primary);border-radius:6px;">
+                <div style="margin-top:6px;">
+                    <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('photoFileInput').click()">
+                        <i class="fas fa-redo"></i> পরিবর্তন করুন
+                    </button>
+                </div>
+            </div>
+            <div id="photoUploadArea" style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);transition:all .2s;"
+                 onclick="document.getElementById('photoFileInput').click()"
+                 ondragover="event.preventDefault();this.style.borderColor='var(--primary)'"
+                 ondragleave="this.style.borderColor='var(--border)'"
+                 ondrop="handlePhotoDrop(event)">
+                <i class="fas fa-camera" style="font-size:28px;color:var(--primary-light);margin-bottom:8px;display:block;"></i>
+                <div style="font-size:13px;font-weight:600;">ছবি আপলোড করুন</div>
+                <div style="font-size:11px;color:var(--text-muted);">JPG / PNG / WebP • সর্বোচ্চ ৫MB</div>
             <?php endif; ?>
-            <input type="file" name="photo" class="form-control" accept="image/*">
-            <div style="font-size:11px;color:#718096;margin-top:4px;">নতুন ছবি দিলে পুরানোটা বদলে যাবে। সর্বোচ্চ ৫MB।</div>
+            </div>
+            <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="openPhotoEditor(this)">
         </div>
+
+<!-- ===== Photo Editor Modal ===== -->
+<div id="photoEditorModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;width:min(96vw,780px);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4);">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:16px;"><i class="fas fa-crop-alt" style="color:var(--primary);"></i> ছবি এডিট করুন</h3>
+            <button type="button" onclick="closePhotoEditor()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted);">✕</button>
+        </div>
+        <div style="padding:16px;display:flex;flex-wrap:wrap;gap:16px;">
+            <div style="flex:1;min-width:260px;">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;"><i class="fas fa-crop-alt"></i> ড্র্যাগ করে মুখ সেট করুন (৩:৪ অনুপাত)</div>
+                <div style="position:relative;display:inline-block;max-width:100%;">
+                    <canvas id="editorCanvas" style="max-width:100%;border:2px solid var(--border);border-radius:8px;display:block;cursor:crosshair;touch-action:none;"></canvas>
+                    <div id="cropOverlay" style="position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.5);cursor:move;pointer-events:all;"></div>
+                    <div class="crop-handle" id="hTL" style="top:-5px;left:-5px;cursor:nw-resize;"></div>
+                    <div class="crop-handle" id="hTR" style="top:-5px;right:-5px;cursor:ne-resize;"></div>
+                    <div class="crop-handle" id="hBL" style="bottom:-5px;left:-5px;cursor:sw-resize;"></div>
+                    <div class="crop-handle" id="hBR" style="bottom:-5px;right:-5px;cursor:se-resize;"></div>
+                </div>
+            </div>
+            <div style="width:180px;flex-shrink:0;">
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;"><i class="fas fa-sliders-h"></i> অ্যাডজাস্টমেন্ট</div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;font-weight:600;display:flex;justify-content:space-between;">উজ্জ্বলতা <span id="brightnessVal">100%</span></label>
+                    <input type="range" id="brightnessRange" min="50" max="200" value="100" oninput="updateEditorPreview()" style="width:100%;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;font-weight:600;display:flex;justify-content:space-between;">কনট্রাস্ট <span id="contrastVal">100%</span></label>
+                    <input type="range" id="contrastRange" min="50" max="200" value="100" oninput="updateEditorPreview()" style="width:100%;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:12px;font-weight:600;display:flex;justify-content:space-between;">স্যাচুরেশন <span id="saturationVal">100%</span></label>
+                    <input type="range" id="saturationRange" min="0" max="200" value="100" oninput="updateEditorPreview()" style="width:100%;">
+                </div>
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:12px;font-weight:600;display:flex;justify-content:space-between;">শার্পনেস <span id="sharpnessVal">0</span></label>
+                    <input type="range" id="sharpnessRange" min="0" max="5" value="0" step="0.5" oninput="updateEditorPreview()" style="width:100%;">
+                </div>
+                <button type="button" onclick="resetEditorSliders()" class="btn btn-outline btn-sm" style="width:100%;margin-bottom:12px;">
+                    <i class="fas fa-undo"></i> রিসেট
+                </button>
+                <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;"><i class="fas fa-eye"></i> প্রিভিউ</div>
+                <canvas id="previewCanvas" width="80" height="103" style="border:2px solid var(--primary);border-radius:6px;display:block;margin:0 auto;"></canvas>
+                <div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:4px;">পাসপোর্ট সাইজ</div>
+            </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+            <button type="button" onclick="skipPhotoCrop()" class="btn btn-outline" style="color:var(--text-muted);font-size:12px;">
+                <i class="fas fa-forward"></i> এড়িয়ে যান (crop ছাড়া)
+            </button>
+            <div style="display:flex;gap:10px;">
+                <button type="button" onclick="closePhotoEditor()" class="btn btn-outline">বাতিল</button>
+                <button type="button" onclick="applyPhotoCrop()" class="btn btn-primary"><i class="fas fa-check"></i> ছবি সেট করুন</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+.crop-handle { position:absolute;width:12px;height:12px;background:#fff;border:2px solid var(--primary);border-radius:3px;pointer-events:all;z-index:10; }
+</style>
+<script>
+var _editorImg=null,_editorScale=1,_canvasW=0,_canvasH=0;
+var _crop={x:0,y:0,w:0,h:0},_drag=null,ASPECT=3/4;
+function handlePhotoDrop(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))openPhotoEditorFromFile(f);}
+function openPhotoEditor(input){if(!input.files||!input.files[0])return;openPhotoEditorFromFile(input.files[0]);}
+function openPhotoEditorFromFile(file){
+    if(file.size>5*1024*1024){alert('ছবির সাইজ ৫MB এর বেশি হবে না।');return;}
+    var r=new FileReader();r.onload=function(e){var img=new Image();img.onload=function(){_editorImg=img;resetEditorSliders();setupEditorCanvas();document.getElementById('photoEditorModal').style.display='flex';};img.src=e.target.result;};r.readAsDataURL(file);
+}
+function setupEditorCanvas(){
+    var canvas=document.getElementById('editorCanvas');
+    var maxW=Math.min(window.innerWidth*0.55,440),maxH=window.innerHeight*0.55;
+    _editorScale=Math.min(maxW/_editorImg.width,maxH/_editorImg.height,1);
+    _canvasW=Math.round(_editorImg.width*_editorScale);_canvasH=Math.round(_editorImg.height*_editorScale);
+    canvas.width=_canvasW;canvas.height=_canvasH;drawEditorCanvas();
+    var ch=Math.min(_canvasH*0.85,_canvasW/ASPECT*0.85),cw=ch*ASPECT;
+    _crop={x:Math.round((_canvasW-cw)/2),y:Math.round((_canvasH-ch)/2),w:Math.round(cw),h:Math.round(ch)};
+    updateCropOverlay();updateEditorPreview();initCropDrag();
+}
+function drawEditorCanvas(){
+    var canvas=document.getElementById('editorCanvas'),ctx=canvas.getContext('2d');
+    ctx.filter='brightness('+document.getElementById('brightnessRange').value+'%) contrast('+document.getElementById('contrastRange').value+'%) saturate('+document.getElementById('saturationRange').value+'%)';
+    ctx.clearRect(0,0,_canvasW,_canvasH);ctx.drawImage(_editorImg,0,0,_canvasW,_canvasH);ctx.filter='none';
+}
+function updateEditorPreview(){
+    document.getElementById('brightnessVal').textContent=document.getElementById('brightnessRange').value+'%';
+    document.getElementById('contrastVal').textContent=document.getElementById('contrastRange').value+'%';
+    document.getElementById('saturationVal').textContent=document.getElementById('saturationRange').value+'%';
+    document.getElementById('sharpnessVal').textContent=document.getElementById('sharpnessRange').value;
+    drawEditorCanvas();renderPreviewCanvas();
+}
+function renderPreviewCanvas(){
+    var prev=document.getElementById('previewCanvas'),pCtx=prev.getContext('2d');
+    var sx=_crop.x/_editorScale,sy=_crop.y/_editorScale,sw=_crop.w/_editorScale,sh=_crop.h/_editorScale;
+    pCtx.filter='brightness('+document.getElementById('brightnessRange').value+'%) contrast('+document.getElementById('contrastRange').value+'%) saturate('+document.getElementById('saturationRange').value+'%)';
+    pCtx.clearRect(0,0,80,103);pCtx.drawImage(_editorImg,sx,sy,sw,sh,0,0,80,103);pCtx.filter='none';
+    var sharp=parseFloat(document.getElementById('sharpnessRange').value);if(sharp>0)applySharpen(pCtx,80,103,sharp);
+}
+function applySharpen(ctx,w,h,amount){
+    var d=ctx.getImageData(0,0,w,h),px=d.data,k=amount*0.3;
+    var kernel=[-k,-k,-k,-k,1+8*k,-k,-k,-k,-k],copy=new Uint8ClampedArray(px);
+    for(var y=1;y<h-1;y++)for(var x=1;x<w-1;x++)for(var ch=0;ch<3;ch++){
+        var sum=0;for(var ky=-1;ky<=1;ky++)for(var kx=-1;kx<=1;kx++)sum+=copy[((y+ky)*w+(x+kx))*4+ch]*kernel[(ky+1)*3+(kx+1)];
+        px[(y*w+x)*4+ch]=Math.min(255,Math.max(0,sum));
+    }
+    ctx.putImageData(d,0,0);
+}
+function resetEditorSliders(){
+    ['brightness','contrast','saturation'].forEach(function(n){document.getElementById(n+'Range').value=100;document.getElementById(n+'Val').textContent='100%';});
+    document.getElementById('sharpnessRange').value=0;document.getElementById('sharpnessVal').textContent='0';
+    if(_editorImg){drawEditorCanvas();renderPreviewCanvas();}
+}
+function updateCropOverlay(){
+    var ov=document.getElementById('cropOverlay');
+    ov.style.left=_crop.x+'px';ov.style.top=_crop.y+'px';ov.style.width=_crop.w+'px';ov.style.height=_crop.h+'px';
+    var h={hTL:[_crop.x-5,_crop.y-5],hTR:[_crop.x+_crop.w-7,_crop.y-5],hBL:[_crop.x-5,_crop.y+_crop.h-7],hBR:[_crop.x+_crop.w-7,_crop.y+_crop.h-7]};
+    Object.keys(h).forEach(function(id){document.getElementById(id).style.left=h[id][0]+'px';document.getElementById(id).style.top=h[id][1]+'px';});
+}
+function initCropDrag(){
+    var canvas=document.getElementById('editorCanvas');
+    function getPos(e){var r=canvas.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+    function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+    function startDrag(type,e){e.preventDefault();var p=getPos(e);_drag={type:type,startX:p.x,startY:p.y,startCrop:Object.assign({},_crop)};}
+    document.getElementById('cropOverlay').addEventListener('mousedown',function(e){startDrag('move',e);});
+    document.getElementById('cropOverlay').addEventListener('touchstart',function(e){startDrag('move',e);},{passive:false});
+    ['hTL','hTR','hBL','hBR'].forEach(function(id){
+        var el=document.getElementById(id);
+        el.addEventListener('mousedown',function(e){e.stopPropagation();startDrag(id.replace('h','').toLowerCase(),e);});
+        el.addEventListener('touchstart',function(e){e.stopPropagation();startDrag(id.replace('h','').toLowerCase(),e);},{passive:false});
+    });
+    function onMove(e){
+        if(!_drag)return;e.preventDefault();
+        var p=getPos(e),dx=p.x-_drag.startX,dy=p.y-_drag.startY,sc=_drag.startCrop,min=40,nw,nh;
+        if(_drag.type==='move'){_crop.x=clamp(sc.x+dx,0,_canvasW-sc.w);_crop.y=clamp(sc.y+dy,0,_canvasH-sc.h);}
+        else if(_drag.type==='br'){nw=clamp(sc.w+dx,min,_canvasW-sc.x);nh=nw/ASPECT;if(sc.y+nh>_canvasH){nh=_canvasH-sc.y;nw=nh*ASPECT;}_crop.w=Math.round(nw);_crop.h=Math.round(nh);}
+        else if(_drag.type==='tl'){nw=clamp(sc.w-dx,min,sc.x+sc.w);nh=nw/ASPECT;_crop.x=Math.round(sc.x+sc.w-nw);_crop.y=Math.round(sc.y+sc.h-nh);_crop.w=Math.round(nw);_crop.h=Math.round(nh);}
+        else if(_drag.type==='tr'){nw=clamp(sc.w+dx,min,_canvasW-sc.x);nh=nw/ASPECT;_crop.y=Math.round(sc.y+sc.h-nh);_crop.w=Math.round(nw);_crop.h=Math.round(nh);}
+        else if(_drag.type==='bl'){nw=clamp(sc.w-dx,min,sc.x+sc.w);nh=nw/ASPECT;_crop.x=Math.round(sc.x+sc.w-nw);_crop.w=Math.round(nw);_crop.h=Math.round(nh);}
+        updateCropOverlay();renderPreviewCanvas();
+    }
+    document.addEventListener('mousemove',onMove);document.addEventListener('touchmove',onMove,{passive:false});
+    document.addEventListener('mouseup',function(){_drag=null;});document.addEventListener('touchend',function(){_drag=null;});
+}
+function applyPhotoCrop(){
+    var out=document.createElement('canvas');out.width=200;out.height=257;
+    var ctx=out.getContext('2d');
+    ctx.filter='brightness('+document.getElementById('brightnessRange').value+'%) contrast('+document.getElementById('contrastRange').value+'%) saturate('+document.getElementById('saturationRange').value+'%)';
+    ctx.drawImage(_editorImg,_crop.x/_editorScale,_crop.y/_editorScale,_crop.w/_editorScale,_crop.h/_editorScale,0,0,200,257);
+    ctx.filter='none';
+    var sharp=parseFloat(document.getElementById('sharpnessRange').value);if(sharp>0)applySharpen(ctx,200,257,sharp);
+    setPhotoResult(out.toDataURL('image/jpeg',0.88));closePhotoEditor();
+}
+function skipPhotoCrop(){
+    var MAX=800,iw=_editorImg.naturalWidth,ih=_editorImg.naturalHeight;
+    var scale=(iw>MAX||ih>MAX)?Math.min(MAX/iw,MAX/ih):1;
+    var out=document.createElement('canvas');out.width=Math.round(iw*scale);out.height=Math.round(ih*scale);
+    var ctx=out.getContext('2d');ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(_editorImg,0,0,out.width,out.height);
+    setPhotoResult(out.toDataURL('image/jpeg',0.82));closePhotoEditor();
+}
+function setPhotoResult(dataUrl){
+    document.getElementById('photoCroppedData').value=dataUrl;
+    document.getElementById('photoPreviewImg').src=dataUrl;
+    document.getElementById('photoPreviewWrap').style.display='';
+    document.getElementById('photoUploadArea').style.display='none';
+}
+function closePhotoEditor(){document.getElementById('photoEditorModal').style.display='none';}
+</script>
     </div>
 </div>
 <div class="card mb-16">
