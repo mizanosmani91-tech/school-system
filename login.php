@@ -159,6 +159,26 @@ body {
 }
 .portal-tab.active { border-color: #1a5276; background: #ebf5fb; color: #1a5276; font-weight: 700; }
 
+/* Staff Kiosk Button */
+.kiosk-divider { display:flex; align-items:center; gap:10px; margin: 22px 0 18px; }
+.kiosk-divider::before, .kiosk-divider::after { content:''; flex:1; height:1px; background:#e2e8f0; }
+.kiosk-divider span { font-size:12px; color:#a0aec0; white-space:nowrap; }
+.btn-kiosk {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 12px;
+    background: linear-gradient(135deg, #0e6655, #1a5276);
+    color: #fff; border: none; border-radius: 9px;
+    font-family: 'Hind Siliguri', sans-serif;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    text-decoration: none; transition: opacity .2s;
+    box-shadow: 0 4px 14px rgba(14,102,85,.3);
+}
+.btn-kiosk:hover { opacity: .9; }
+.btn-kiosk .kiosk-badge {
+    background: rgba(255,255,255,.2); border-radius: 5px;
+    padding: 2px 8px; font-size: 11px; font-weight: 600;
+}
+
 /* hint box for student/parent login */
 .hint-box {
     background: #f0f9ff; border: 1px solid #bee3f8; border-radius: 8px;
@@ -304,6 +324,14 @@ body {
                 অভিভাবক/ছাত্র: Student ID + Secret Code (Admission Slip দেখুন)
             </p>
         </div>
+
+        <!-- Staff Attendance Kiosk -->
+        <div class="kiosk-divider"><span>অথবা</span></div>
+        <a href="staff_attendance.php" class="btn-kiosk">
+            <i class="fas fa-fingerprint" style="font-size:18px;"></i>
+            শিক্ষক চেক ইন / চেক আউট
+            <span class="kiosk-badge">Kiosk</span>
+        </a>
     </div>
 </div>
 
