@@ -15,7 +15,7 @@ $db = getDB();
 function idcs($key, $default = '') {
     global $db;
     try {
-        $r = $db->prepare("SELECT value FROM settings WHERE `key`=? LIMIT 1");
+        $r = $db->prepare("SELECT setting_value FROM settings WHERE setting_key=? LIMIT 1");
         $r->execute([$key]);
         $v = $r->fetchColumn();
         return $v !== false ? $v : $default;
@@ -24,12 +24,12 @@ function idcs($key, $default = '') {
 function saveIdcs($key, $value) {
     global $db;
     try {
-        $c = $db->prepare("SELECT COUNT(*) FROM settings WHERE `key`=?");
+        $c = $db->prepare("SELECT COUNT(*) FROM settings WHERE setting_key=?");
         $c->execute([$key]);
         if ($c->fetchColumn()) {
-            $db->prepare("UPDATE settings SET value=? WHERE `key`=?")->execute([$value, $key]);
+            $db->prepare("UPDATE settings SET setting_value=? WHERE setting_key=?")->execute([$value, $key]);
         } else {
-            $db->prepare("INSERT INTO settings(`key`,value) VALUES(?,?)")->execute([$key, $value]);
+            $db->prepare("INSERT INTO settings(setting_key, setting_value) VALUES(?,?)")->execute([$key, $value]);
         }
         return true;
     } catch(Exception $e) { return false; }
