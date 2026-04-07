@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets=[]; $vals=[];
     $simpleFields = [
         'name_bn','name','date_of_birth','gender','religion','blood_group',
-        'class_id','section_id','roll_number',
+        'class_id','roll_number',
         'father_name','father_phone','mother_name','guardian_phone',
         'address_present','status','hifz_para_complete','notes'
     ];
@@ -34,6 +34,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
         $sets[] = "$f=?";
         $vals[] = trim($_POST[$f]??'') ?: null;
     }
+    // section_id আলাদাভাবে validate করো — class-এ section না থাকলে NULL সেভ হবে
+    $postedClassId   = (int)($_POST['class_id'] ?? 0);
+    $postedSectionId = (int)($_POST['section_id'] ?? 0);
+    $validSection = null;
+    if ($postedSectionId && $postedClassId) {
+        $chk = $db->prepare("SELECT id FROM sections WHERE id=? AND class_id=?");
+        $chk->execute([$postedSectionId, $postedClassId]);
+        if ($chk->fetch()) $validSection = $postedSectionId;
+    }
+    $sets[] = 'section_id=?'; $vals[] = $validSection;
     // ফি ফিল্ড আলাদাভাবে
     $sets[] = 'monthly_fee=?';    $vals[] = (float)($_POST['monthly_fee'] ?? 0);
     $sets[] = 'is_hostel=?';      $vals[] = $isHostel;
@@ -168,9 +178,14 @@ require_once '../../includes/header.php';
                 </select></div>
             <div class="form-group"><label>শাখা</label>
                 <select name="section_id" class="form-control" id="sectionSelect">
+                    <?php if (empty($currentSections)): ?>
+                    <option value="">-- শাখা নেই --</option>
+                    <?php else: ?>
+                    <option value="">শাখা নির্বাচন করুন</option>
                     <?php foreach($currentSections as $sec): ?>
                     <option value="<?=$sec['id']?>" <?=$student['section_id']==$sec['id']?'selected':''?>><?=e($sec['section_name'])?></option>
                     <?php endforeach; ?>
+                    <?php endif; ?>
                 </select></div>
             <div class="form-group"><label>রোল নম্বর</label>
                 <input type="number" name="roll_number" class="form-control" min="1" value="<?=e($student['roll_number']?? '')?>"></div>
@@ -503,11 +518,18 @@ function toggleFood(cb) {
     if (!cb.checked) document.getElementById('foodFee').value = 0;
 }
 function loadSections(classId) {
+    const sel = document.getElementById('sectionSelect');
+    sel.innerHTML = '<option value="">লোড হচ্ছে...</option>';
     fetch('<?=BASE_URL?>/api/sections.php?class_id='+classId)
-    .then(r=>r.json()).then(data=>{
-        const sel=document.getElementById('sectionSelect');
-        sel.innerHTML='<option value="">সেকশন নির্বাচন করুন</option>';
-        data.forEach(s=>{ sel.innerHTML+=`<option value="${s.id}">${s.section_name}</option>`; });
+    .then(r => r.json()).then(data => {
+        if (!data || data.length === 0) {
+            sel.innerHTML = '<option value="">-- শাখা নেই --</option>';
+        } else {
+            sel.innerHTML = '<option value="">শাখা নির্বাচন করুন</option>';
+            data.forEach(s => { sel.innerHTML += `<option value="${s.id}">${s.section_name}</option>`; });
+        }
+    }).catch(() => {
+        sel.innerHTML = '<option value="">-- শাখা নেই --</option>';
     });
 }
 </script>
