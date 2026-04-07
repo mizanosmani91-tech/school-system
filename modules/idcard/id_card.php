@@ -6,16 +6,14 @@ $db = getDB();
 
 $classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
 $filterClass = (int)($_GET['class_id'] ?? 0);
-$filterIds   = $_GET['ids'] ?? ''; // comma separated ids
+$filterIds   = $_GET['ids'] ?? '';
 $design      = $_GET['design'] ?? 'modern';
-$type        = $_GET['type'] ?? 'student'; // student, teacher, staff
+$type        = $_GET['type'] ?? 'student';
 $printMode   = isset($_GET['print']);
 
-// ===== ডেটা লোড (ধরন অনুযায়ী) =====
-$students = []; // সব ধরনের কার্ডই এই array তে থাকবে
+$students = [];
 
 if ($type === 'teacher') {
-    // শিক্ষক লোড
     if ($filterIds) {
         $ids = array_map('intval', explode(',', $filterIds));
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -31,9 +29,7 @@ if ($type === 'teacher') {
             '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
             FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
     }
-
 } elseif ($type === 'staff') {
-    // স্টাফ লোড
     if ($filterIds) {
         $ids = array_map('intval', explode(',', $filterIds));
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -49,9 +45,7 @@ if ($type === 'teacher') {
             '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
             FROM staff WHERE is_active=1 ORDER BY name_bn")->fetchAll();
     }
-
 } else {
-    // ছাত্র লোড
     if ($filterIds) {
         $ids = array_map('intval', explode(',', $filterIds));
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
@@ -81,45 +75,93 @@ $institutePhone   = getSetting('phone', '01715-821661');
 $instituteWeb     = getSetting('website', 'www.annazah.com');
 $logoPath         = getSetting('logo', '');
 
-// ===== ডিজাইন সেটিংস লোড =====
+// ===== ডিজাইন সেটিংস =====
 $idc = [
+    // লোগো
     'logo'        => getSetting('id_card_logo_b64',''),
+    'logo_sz'     => getSetting('id_card_logo_size','32'),
+    // স্ট্রিপ
     'strip_svg'   => getSetting('id_card_strip_svg',''),
     'use_svg'     => getSetting('id_card_strip_use_custom_svg','0'),
     'sc1'         => getSetting('id_card_strip_color1','#1a8a3c'),
     'sc2'         => getSetting('id_card_strip_color2','#e67e22'),
+    'strip_w'     => getSetting('id_card_strip_width','30'),
+    // লেবেল
     'label_font'  => getSetting('id_card_label_font','Hind Siliguri'),
     'label_size'  => getSetting('id_card_label_size','9'),
     'label_w'     => getSetting('id_card_label_weight','700'),
     'label_style' => getSetting('id_card_label_style','normal'),
     'label_color' => getSetting('id_card_label_color','#ffffff'),
     'label_ls'    => getSetting('id_card_label_spacing','2'),
+    // নাম
     'name_font'   => getSetting('id_card_name_font','Libre Baskerville'),
     'name_size'   => getSetting('id_card_name_size','14'),
     'name_w'      => getSetting('id_card_name_weight','700'),
     'name_color'  => getSetting('id_card_name_color','#1a8a3c'),
+    'name_align'  => getSetting('id_card_name_align','center'),
+    'name_mt'     => getSetting('id_card_name_mt','6'),
+    // আইডি
     'id_font'     => getSetting('id_card_id_font','Hind Siliguri'),
     'id_size'     => getSetting('id_card_id_size','8.5'),
     'id_color'    => getSetting('id_card_id_color','#555555'),
+    'id_align'    => getSetting('id_card_id_align','center'),
+    // টেবিল
     'tb_font'     => getSetting('id_card_table_font','Hind Siliguri'),
     'tb_size'     => getSetting('id_card_table_size','8'),
     'tb_lc'       => getSetting('id_card_table_label_color','#1a5276'),
     'tb_vc'       => getSetting('id_card_table_val_color','#333333'),
+    'tb_rh'       => getSetting('id_card_table_row_height','1.8'),
+    'tb_lw'       => getSetting('id_card_table_label_width','38'),
+    // হেডার
     'ar_font'     => getSetting('id_card_arabic_font','Hind Siliguri'),
     'ar_size'     => getSetting('id_card_arabic_size','7.5'),
     'ar_color'    => getSetting('id_card_arabic_color','#1a5276'),
     'bn_font'     => getSetting('id_card_bn_font','Hind Siliguri'),
     'bn_size'     => getSetting('id_card_bn_size','6.5'),
     'bn_color'    => getSetting('id_card_bn_color','#1a8a3c'),
+    // কার্ড রং
     's_c1'        => getSetting('id_card_student_color1','#1a8a3c'),
     's_c2'        => getSetting('id_card_student_color2','#e67e22'),
     't_c1'        => getSetting('id_card_teacher_color1','#1a3a6b'),
     't_c2'        => getSetting('id_card_teacher_color2','#c9a227'),
     'sf_c1'       => getSetting('id_card_staff_color1','#5b2c8c'),
     'sf_c2'       => getSetting('id_card_staff_color2','#8e44ad'),
+    // ছবি ও বর্ডার
     'photo_bc'    => getSetting('id_card_photo_border_color','#e67e22'),
+    'photo_w'     => getSetting('id_card_photo_width','80'),
+    'photo_h'     => getSetting('id_card_photo_height','95'),
     'radius'      => getSetting('id_card_border_radius','10'),
+    // FRONT padding
+    'f_pt'        => getSetting('id_card_front_pt','8'),
+    'f_pb'        => getSetting('id_card_front_pb','8'),
+    'f_pl'        => getSetting('id_card_front_pl','6'),
+    'f_pr'        => getSetting('id_card_front_pr','8'),
+    // BACK content
+    'back_title'  => getSetting('id_card_back_title','Terms and Condition'),
+    'bt_font'     => getSetting('id_card_back_title_font','Libre Baskerville'),
+    'bt_size'     => getSetting('id_card_back_title_size','10'),
+    'bt_color'    => getSetting('id_card_back_title_color','#1a5276'),
+    'bt_align'    => getSetting('id_card_back_title_align','center'),
+    'back_terms'  => getSetting('id_card_back_terms','This ID card must be brought and worn whenever the student attends the madrasah. If this card is lost, the student or guardian must inform the office immediately. If anyone finds this card, please return it to An Nazah Tahfizul Quran Madrasah. Misuse, lending, or altering this card in any way is strictly prohibited.'),
+    'bx_font'     => getSetting('id_card_back_text_font','Hind Siliguri'),
+    'bx_size'     => getSetting('id_card_back_text_size','6.5'),
+    'bx_color'    => getSetting('id_card_back_text_color','#444444'),
+    'bx_align'    => getSetting('id_card_back_text_align','justify'),
+    'sig_label'   => getSetting('id_card_back_sig_label',"Principal's Signature"),
+    'sig_font'    => getSetting('id_card_back_sig_font','Hind Siliguri'),
+    'sig_size'    => getSetting('id_card_back_sig_size','6'),
+    'sig_color'   => getSetting('id_card_back_sig_color','#555555'),
+    'addr_font'   => getSetting('id_card_back_addr_font','Hind Siliguri'),
+    'addr_size'   => getSetting('id_card_back_addr_size','6.5'),
+    'addr_color'  => getSetting('id_card_back_addr_color','#444444'),
+    'addr_align'  => getSetting('id_card_back_addr_align','center'),
+    // BACK padding
+    'b_pt'        => getSetting('id_card_back_pt','12'),
+    'b_pb'        => getSetting('id_card_back_pb','8'),
+    'b_pl'        => getSetting('id_card_back_pl','10'),
+    'b_pr'        => getSetting('id_card_back_pr','10'),
 ];
+
 if ($type === 'teacher')   { $idc['c1']=$idc['t_c1'];  $idc['c2']=$idc['t_c2'];  }
 elseif ($type === 'staff') { $idc['c1']=$idc['sf_c1']; $idc['c2']=$idc['sf_c2']; }
 else                       { $idc['c1']=$idc['s_c1'];  $idc['c2']=$idc['s_c2'];  }
@@ -128,7 +170,6 @@ require_once '../../includes/header.php';
 ?>
 
 <?php if (!$printMode): ?>
-<!-- ===== কন্ট্রোল প্যানেল ===== -->
 <div class="section-header no-print">
     <h2 class="section-title"><i class="fas fa-id-card"></i> আইডি কার্ড জেনারেটর</h2>
     <div style="display:flex;gap:8px;">
@@ -139,12 +180,10 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- ফিল্টার -->
 <div class="card mb-16 no-print">
     <div class="card-body" style="padding:16px 20px;">
         <form method="GET" id="filterForm">
             <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
-                <!-- ধরন -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                     <label style="font-size:12px;">ধরন</label>
                     <select name="type" class="form-control" style="padding:8px;" onchange="onTypeChange(this)">
@@ -153,7 +192,6 @@ require_once '../../includes/header.php';
                         <option value="staff"   <?= $type==='staff'  ?'selected':'' ?>>স্টাফ</option>
                     </select>
                 </div>
-                <!-- শ্রেণী (শুধু ছাত্রের জন্য) -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;" id="classDiv" <?= $type!=='student'?'style="display:none;"':'' ?>>
                     <label style="font-size:12px;">শ্রেণী</label>
                     <select name="class_id" class="form-control" style="padding:8px;" onchange="this.form.submit()">
@@ -163,7 +201,6 @@ require_once '../../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <!-- ডিজাইন -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                     <label style="font-size:12px;">ডিজাইন</label>
                     <select name="design" class="form-control" style="padding:8px;" onchange="this.form.submit()">
@@ -177,8 +214,6 @@ require_once '../../includes/header.php';
         </form>
 
         <?php
-        // শিক্ষক/স্টাফ: সরাসরি সবাই দেখা যাবে, নির্বাচন বাটন দেখাব
-        // ছাত্র: শ্রেণী বেছে নিলে তবে দেখাবে
         $showCheckboxControls = ($type !== 'student') || ($filterClass && !empty($students));
         if ($showCheckboxControls && !empty($students)):
         ?>
@@ -192,14 +227,10 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- চেকবক্স তালিকা -->
 <?php if (!empty($students) && (($type === 'student' && $filterClass) || $type !== 'student')): ?>
 <div class="card mb-16 no-print">
     <div class="card-header">
-        <span class="card-title">
-            মোট <?= toBanglaNumber(count($students)) ?> জন
-            <?= $type==='teacher' ? 'শিক্ষক' : ($type==='staff' ? 'স্টাফ' : 'ছাত্র') ?>
-        </span>
+        <span class="card-title">মোট <?= toBanglaNumber(count($students)) ?> জন <?= $type==='teacher' ? 'শিক্ষক' : ($type==='staff' ? 'স্টাফ' : 'ছাত্র') ?></span>
     </div>
     <div class="card-body" style="padding:12px 20px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
@@ -216,7 +247,7 @@ require_once '../../includes/header.php';
     </div>
 </div>
 <?php endif; ?>
-<?php endif; // !$printMode ?>
+<?php endif; ?>
 
 <!-- ===== আইডি কার্ড ===== -->
 <?php if (!empty($students)): ?>
@@ -228,10 +259,9 @@ require_once '../../includes/header.php';
         $firstNameEn = $nameParts[0] ?? '';
         $lastNameEn  = $nameParts[1] ?? '';
 
-        // PHP 7 compatible: str_starts_with নেই, strpos দিয়ে করব
         $rawPhoto = $s['photo'] ?? '';
         if ($rawPhoto && strpos($rawPhoto, 'http') === 0) {
-            $photoUrl = $rawPhoto; // Cloudinary full URL
+            $photoUrl = $rawPhoto;
         } elseif ($rawPhoto) {
             $photoUrl = BASE_URL . '/assets/uploads/' . $rawPhoto;
         } else {
@@ -245,27 +275,50 @@ require_once '../../includes/header.php';
         $stuId       = $s['student_id'] ?? '';
         $father      = $s['father_name_bn'] ?? '';
         $phone       = $s['father_phone'] ?? $s['guardian_phone'] ?? '';
+
+        // ইনলাইন স্টাইল helpers
+        $frontBodyPad = "padding:{$idc['f_pt']}px {$idc['f_pr']}px {$idc['f_pb']}px {$idc['f_pl']}px;";
+        $backBodyPad  = "padding:{$idc['b_pt']}px {$idc['b_pr']}px {$idc['b_pb']}px {$idc['b_pl']}px;";
+        $rowStyle     = "font-family:'{$idc['tb_font']}',sans-serif;font-size:{$idc['tb_size']}px;line-height:{$idc['tb_rh']};";
+        $lblStyle     = "color:{$idc['tb_lc']};width:{$idc['tb_lw']}px;";
+        $valStyle     = "color:{$idc['tb_vc']};";
     ?>
 
     <div class="id-card-pair">
 
         <!-- ===== পেছনের দিক (Back) ===== -->
-        <div class="id-card card-back">
+        <div class="id-card card-back" style="border-radius:<?= (int)$idc['radius'] ?>px;">
             <div class="back-watermark"><i class="fas fa-mosque"></i></div>
-            <div class="back-content">
-                <h3 class="back-title">Terms and Condition</h3>
-                <p class="back-text">This ID card must be brought and worn whenever the student attends the madrasah. If this card is lost, the student or guardian must inform the office immediately. If anyone finds this card, please return it to An Nazah Tahfizul Quran Madrasah. Misuse, lending, or altering this card in any way is strictly prohibited.</p>
+            <div class="back-content" style="<?= $backBodyPad ?>">
+
+                <!-- শিরোনাম -->
+                <h3 class="back-title" style="
+                    font-family:'<?= e($idc['bt_font']) ?>',serif;
+                    font-size:<?= e($idc['bt_size']) ?>px;
+                    color:<?= e($idc['bt_color']) ?>;
+                    text-align:<?= e($idc['bt_align']) ?>;">
+                    <?= e($idc['back_title']) ?>
+                </h3>
+
+                <!-- Terms টেক্সট -->
+                <p class="back-text" style="
+                    font-family:'<?= e($idc['bx_font']) ?>',sans-serif;
+                    font-size:<?= e($idc['bx_size']) ?>px;
+                    color:<?= e($idc['bx_color']) ?>;
+                    text-align:<?= e($idc['bx_align']) ?>;">
+                    <?= e($idc['back_terms']) ?>
+                </p>
 
                 <div class="back-bottom">
                     <div class="back-qr">
                         <div class="qr-box">
                             <svg viewBox="0 0 100 100" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
-                                <rect x="5" y="5" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
-                                <rect x="12" y="12" width="21" height="21" rx="1" fill="#e67e22"/>
-                                <rect x="60" y="5" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
-                                <rect x="67" y="12" width="21" height="21" rx="1" fill="#e67e22"/>
-                                <rect x="5" y="60" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
-                                <rect x="12" y="67" width="21" height="21" rx="1" fill="#e67e22"/>
+                                <rect x="5" y="5" width="35" height="35" rx="3" fill="none" stroke="<?= e($idc['c2']) ?>" stroke-width="4"/>
+                                <rect x="12" y="12" width="21" height="21" rx="1" fill="<?= e($idc['c2']) ?>"/>
+                                <rect x="60" y="5" width="35" height="35" rx="3" fill="none" stroke="<?= e($idc['c2']) ?>" stroke-width="4"/>
+                                <rect x="67" y="12" width="21" height="21" rx="1" fill="<?= e($idc['c2']) ?>"/>
+                                <rect x="5" y="60" width="35" height="35" rx="3" fill="none" stroke="<?= e($idc['c2']) ?>" stroke-width="4"/>
+                                <rect x="12" y="67" width="21" height="21" rx="1" fill="<?= e($idc['c2']) ?>"/>
                                 <rect x="55" y="55" width="8" height="8" fill="#333"/>
                                 <rect x="67" y="55" width="8" height="8" fill="#333"/>
                                 <rect x="79" y="55" width="8" height="8" fill="#333"/>
@@ -279,12 +332,23 @@ require_once '../../includes/header.php';
                                 <rect x="79" y="91" width="8" height="8" fill="#333"/>
                             </svg>
                         </div>
+                        <!-- স্বাক্ষর -->
                         <div class="back-sig">
                             <div class="sig-line"></div>
-                            <div class="sig-text">Principal's Signature</div>
+                            <div class="sig-text" style="
+                                font-family:'<?= e($idc['sig_font']) ?>',sans-serif;
+                                font-size:<?= e($idc['sig_size']) ?>px;
+                                color:<?= e($idc['sig_color']) ?>;">
+                                <?= e($idc['sig_label']) ?>
+                            </div>
                         </div>
                     </div>
-                    <div class="back-address">
+                    <!-- ঠিকানা -->
+                    <div class="back-address" style="
+                        font-family:'<?= e($idc['addr_font']) ?>',sans-serif;
+                        font-size:<?= e($idc['addr_size']) ?>px;
+                        color:<?= e($idc['addr_color']) ?>;
+                        text-align:<?= e($idc['addr_align']) ?>;">
                         <p><?= e($instituteAddress) ?></p>
                         <p style="margin-top:5px;font-weight:700;">Mobile: <?= e($institutePhone) ?></p>
                         <p style="font-weight:700;"><?= e($instituteWeb) ?></p>
@@ -296,7 +360,7 @@ require_once '../../includes/header.php';
         <!-- ===== সামনের দিক (Front) ===== -->
         <div class="id-card card-front <?= e($type) ?>" style="border-radius:<?= (int)$idc['radius'] ?>px;">
             <!-- সাইড স্ট্রিপ -->
-            <div class="front-strip">
+            <div class="front-strip" style="width:<?= (int)$idc['strip_w'] ?>px;">
                 <?php if ($idc['use_svg'] === '1' && $idc['strip_svg']): ?>
                     <div style="position:absolute;inset:0;overflow:hidden;"><?= $idc['strip_svg'] ?></div>
                 <?php else: ?>
@@ -318,15 +382,18 @@ require_once '../../includes/header.php';
                 </div>
             </div>
 
-            <div class="front-body">
+            <div class="front-body" style="<?= $frontBodyPad ?>">
                 <!-- লোগো ও প্রতিষ্ঠানের নাম -->
                 <div class="front-header" style="border-bottom-color:<?= e($idc['c1']) ?>;">
-                    <?php if($idc['logo']): ?>
-                    <img src="<?= $idc['logo'] ?>" class="front-logo" alt="logo">
+                    <?php
+                    $logoSz = (int)($idc['logo_sz'] ?? 32);
+                    $logoStyle = "width:{$logoSz}px;height:{$logoSz}px;";
+                    if($idc['logo']): ?>
+                    <img src="<?= $idc['logo'] ?>" class="front-logo" style="<?= $logoStyle ?>object-fit:contain;flex-shrink:0;" alt="logo">
                     <?php elseif($logoPath): ?>
-                    <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" alt="logo">
+                    <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" style="<?= $logoStyle ?>object-fit:contain;flex-shrink:0;" alt="logo">
                     <?php else: ?>
-                    <div class="front-logo-placeholder" style="background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);"><i class="fas fa-mosque"></i></div>
+                    <div class="front-logo-placeholder" style="<?= $logoStyle ?>background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-mosque" style="color:#fff;font-size:<?= round($logoSz*0.4) ?>px;"></i></div>
                     <?php endif; ?>
                     <div class="front-institute">
                         <div class="front-institute-arabic" style="
@@ -346,15 +413,19 @@ require_once '../../includes/header.php';
 
                 <!-- ছাত্রের ছবি -->
                 <div class="front-photo-wrap">
-                    <?php if($photoUrl): ?>
-                    <img src="<?= e($photoUrl) ?>" class="front-photo" style="border-color:<?= e($idc['photo_bc']) ?>;" alt="photo">
+                    <?php
+                    $photoW = (int)($idc['photo_w'] ?? 80);
+                    $photoH = (int)($idc['photo_h'] ?? 95);
+                    $photoStyle = "width:{$photoW}px;height:{$photoH}px;";
+                    if($photoUrl): ?>
+                    <img src="<?= e($photoUrl) ?>" class="front-photo" style="<?= $photoStyle ?>object-fit:cover;border:3px solid <?= e($idc['photo_bc']) ?>;border-radius:4px;display:inline-block;" alt="photo">
                     <?php else: ?>
-                    <div class="front-photo-avatar" style="border-color:<?= e($idc['photo_bc']) ?>;color:<?= e($idc['c1']) ?>;"><?= mb_substr($name, 0, 1) ?></div>
+                    <div class="front-photo-avatar" style="<?= $photoStyle ?>border:3px solid <?= e($idc['photo_bc']) ?>;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;background:#f0f8f0;font-size:<?= round($photoH*0.33) ?>px;font-weight:700;color:<?= e($idc['c1']) ?>;"><?= mb_substr($name, 0, 1) ?></div>
                     <?php endif; ?>
                 </div>
 
                 <!-- নাম -->
-                <div class="front-name">
+                <div class="front-name" style="text-align:<?= e($idc['name_align']) ?>;margin-top:<?= (int)$idc['name_mt'] ?>px;line-height:1.2;">
                     <span class="name-first" style="
                         font-family:'<?= e($idc['name_font']) ?>',serif;
                         font-size:<?= e($idc['name_size']) ?>px;
@@ -370,20 +441,18 @@ require_once '../../includes/header.php';
                     </span>
                     <?php endif; ?>
                 </div>
+
+                <!-- ID নম্বর -->
                 <div class="front-id" style="
                     font-family:'<?= e($idc['id_font']) ?>',sans-serif;
                     font-size:<?= e($idc['id_size']) ?>px;
-                    color:<?= e($idc['id_color']) ?>;">
+                    color:<?= e($idc['id_color']) ?>;
+                    text-align:<?= e($idc['id_align']) ?>;">
                     ID: <?= e($stuId) ?>
                 </div>
 
+                <!-- তথ্য টেবিল -->
                 <div class="front-table" style="border-top-color:<?= e($idc['c1']) ?>;">
-                    <?php
-                    // টেবিল সারির ইনলাইন স্টাইল
-                    $rowStyle  = 'font-family:\'' . e($idc['tb_font']) . '\',sans-serif;font-size:' . e($idc['tb_size']) . 'px;';
-                    $lblStyle  = 'color:' . e($idc['tb_lc']) . ';';
-                    $valStyle  = 'color:' . e($idc['tb_vc']) . ';';
-                    ?>
                     <?php if ($type === 'teacher' || $type === 'staff'): ?>
                     <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">পদবী</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($s['designation_bn'] ?? '-') ?></span></div>
                     <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">ID</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($stuId) ?></span></div>
@@ -425,7 +494,6 @@ require_once '../../includes/header.php';
 .id-card {
     width: 204px;
     height: 323px;
-    border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 6px 24px rgba(0,0,0,.18);
     position: relative;
@@ -437,7 +505,6 @@ require_once '../../includes/header.php';
     display: flex;
 }
 .front-strip {
-    width: 30px;
     position: relative;
     flex-shrink: 0;
     overflow: hidden;
@@ -470,22 +537,14 @@ require_once '../../includes/header.php';
 }
 .front-body {
     flex: 1; display: flex; flex-direction: column;
-    padding: 8px 8px 8px 6px;
+    overflow: hidden;
 }
 .front-header {
     display: flex; align-items: center; gap: 5px;
     border-bottom: 2px solid #1a8a3c;
     padding-bottom: 5px; margin-bottom: 6px;
 }
-.front-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
-.front-logo-placeholder {
-    width: 32px; height: 32px;
-    background: linear-gradient(135deg,#1a8a3c,#e67e22);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 15px; flex-shrink: 0;
-}
-.front-institute { flex: 1; text-align: center; }
+.front-institute { flex: 1; text-align: center; overflow: hidden; }
 .front-institute-arabic {
     font-size: 7.5px; color: #1a5276; font-weight: 600;
     line-height: 1.3; direction: rtl; text-align: center;
@@ -495,26 +554,10 @@ require_once '../../includes/header.php';
     line-height: 1.3; text-align: center;
 }
 .front-photo-wrap { text-align: center; margin: 4px 0; }
-.front-photo {
-    width: 80px; height: 95px; object-fit: cover;
-    border: 3px solid #e67e22; border-radius: 4px; display: inline-block;
-}
-.front-photo-avatar {
-    width: 80px; height: 95px;
-    background: #f0f8f0;
-    border: 3px solid #e67e22;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center; justify-content: center;
-    font-size: 32px; font-weight: 700; color: #1a8a3c;
-}
-.front-name { text-align: center; margin-top: 6px; line-height: 1.2; }
-.name-first { font-size: 14px; font-weight: 700; color: #1a8a3c; font-family: 'Libre Baskerville', serif; }
-.name-last  { font-size: 14px; font-weight: 400; color: #333; font-family: 'Libre Baskerville', serif; }
-.front-id { text-align: center; font-size: 8.5px; font-weight: 700; color: #555; margin: 2px 0 5px; letter-spacing: 0.5px; }
+.front-id { font-weight: 700; margin: 2px 0 5px; letter-spacing: 0.5px; }
 .front-table { border-top: 1px dashed #1a8a3c; padding-top: 5px; }
-.front-row { display: flex; font-size: 8px; line-height: 1.8; color: #333; }
-.fr-label { width: 38px; color: #1a5276; font-weight: 600; }
+.front-row { display: flex; }
+.fr-label { font-weight: 600; flex-shrink: 0; }
 .fr-val { flex: 1; }
 
 /* BACK */
@@ -529,45 +572,17 @@ require_once '../../includes/header.php';
     font-size: 90px; color: rgba(26,138,60,.06); pointer-events: none;
 }
 .back-content {
-    padding: 12px 10px 8px;
     display: flex; flex-direction: column; height: 100%;
     position: relative; z-index: 1;
 }
-.back-title { font-size: 10px; font-weight: 700; color: #1a5276; text-align: center; margin-bottom: 7px; font-family: 'Libre Baskerville', serif; }
-.back-text { font-size: 6.5px; color: #444; line-height: 1.7; text-align: justify; flex: 1; }
+.back-title { font-weight: 700; margin-bottom: 7px; }
+.back-text { line-height: 1.7; text-align: justify; flex: 1; }
 .back-bottom { margin-top: 8px; border-top: 1px solid #e67e22; padding-top: 7px; display: flex; flex-direction: column; gap: 5px; }
 .back-qr { display: flex; align-items: center; justify-content: space-between; }
 .qr-box { background: #fff8f0; border: 1px solid #e67e22; border-radius: 4px; padding: 3px; }
 .back-sig { text-align: center; }
 .sig-line { width: 60px; border-top: 1px solid #333; margin: 0 auto 2px; }
-.sig-text { font-size: 6px; color: #555; }
-.back-address { font-size: 6.5px; color: #444; text-align: center; line-height: 1.6; }
-
-/* TEACHER — নীল-সোনালি */
-.card-front.teacher .strip-green { background: #1a3a6b; }
-.card-front.teacher .strip-orange { background: #c9a227; }
-.card-front.teacher .front-header { border-bottom-color: #1a3a6b; }
-.card-front.teacher .front-institute-arabic { color: #1a3a6b; }
-.card-front.teacher .front-institute-bn { color: #c9a227; }
-.card-front.teacher .front-photo { border-color: #c9a227; }
-.card-front.teacher .front-photo-avatar { background: #eef2f8; border-color: #c9a227; color: #1a3a6b; }
-.card-front.teacher .front-logo-placeholder { background: linear-gradient(135deg,#1a3a6b,#c9a227); }
-.card-front.teacher .name-first { color: #1a3a6b; }
-.card-front.teacher .fr-label { color: #1a3a6b; }
-.card-front.teacher .front-table { border-top-color: #c9a227; }
-
-/* STAFF — বেগুনি-রুপালি */
-.card-front.staff .strip-green { background: #5b2c8c; }
-.card-front.staff .strip-orange { background: #8e44ad; }
-.card-front.staff .front-header { border-bottom-color: #5b2c8c; }
-.card-front.staff .front-institute-arabic { color: #5b2c8c; }
-.card-front.staff .front-institute-bn { color: #8e44ad; }
-.card-front.staff .front-photo { border-color: #8e44ad; }
-.card-front.staff .front-photo-avatar { background: #f5eefb; border-color: #8e44ad; color: #5b2c8c; }
-.card-front.staff .front-logo-placeholder { background: linear-gradient(135deg,#5b2c8c,#8e44ad); }
-.card-front.staff .name-first { color: #5b2c8c; }
-.card-front.staff .fr-label { color: #5b2c8c; }
-.card-front.staff .front-table { border-top-color: #8e44ad; }
+.back-address { line-height: 1.6; }
 
 /* PRINT */
 @media print {
@@ -586,10 +601,7 @@ require_once '../../includes/header.php';
 <script>
 function onTypeChange(sel) {
     var classDiv = document.getElementById('classDiv');
-    if (classDiv) {
-        classDiv.style.display = sel.value === 'student' ? '' : 'none';
-    }
-    // class_id রিসেট করে ফর্ম সাবমিট
+    if (classDiv) classDiv.style.display = sel.value === 'student' ? '' : 'none';
     var classSelect = document.querySelector('select[name="class_id"]');
     if (classSelect) classSelect.value = '';
     sel.form.submit();
@@ -606,7 +618,7 @@ function generateSelected() {
     if (!ids.length) { alert('কমপক্ষে একজন নির্বাচন করুন।'); return; }
     var params = new URLSearchParams(window.location.search);
     params.set('ids', ids.join(','));
-    params.delete('class_id'); // class_id না থাকলে ids দিয়ে লোড হবে
+    params.delete('class_id');
     window.location.href = '?' + params.toString();
 }
 function printCards() {
