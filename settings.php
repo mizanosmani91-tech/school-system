@@ -96,9 +96,13 @@ require_once 'includes/header.php';
             <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
             <input type="hidden" name="save_settings" value="1">
             <div class="form-group mb-16">
-                <label>Anthropic AI API Key</label>
-                <input type="password" name="ai_api_key" class="form-control" value="<?=e($settings['ai_api_key']??'')?>" placeholder="sk-ant-...">
-                <small style="color:var(--text-muted);font-size:12px;">AI সহকারী ব্যবহারের জন্য <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> থেকে API Key নিন।</small>
+                <label>Google Gemini AI API Key</label>
+                <input type="password" name="ai_api_key" class="form-control" value="<?=e($settings['ai_api_key']??'')?>" placeholder="AIza...">
+                <small style="color:var(--text-muted);font-size:12px;">
+                    AI সহকারী ব্যবহারের জন্য
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a>
+                    থেকে <strong>বিনামূল্যে</strong> API Key নিন। (প্রতিদিন ১৫০০ request বিনামূল্যে)
+                </small>
             </div>
             <div class="form-group mb-16">
                 <label>SMS API Key</label>
