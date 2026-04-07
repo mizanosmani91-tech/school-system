@@ -6,41 +6,80 @@ $db = getDB();
 
 $classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
 $filterClass = (int)($_GET['class_id'] ?? 0);
-$filterIds   = $_GET['ids'] ?? ''; // comma separated student ids
-$design      = $_GET['design'] ?? 'modern'; // modern, classic, green
+$filterIds   = $_GET['ids'] ?? ''; // comma separated ids
+$design      = $_GET['design'] ?? 'modern';
 $type        = $_GET['type'] ?? 'student'; // student, teacher, staff
 $printMode   = isset($_GET['print']);
 
-// ছাত্র লোড
-$students = [];
-if ($filterIds) {
-    $ids = array_map('intval', explode(',', $filterIds));
-    $placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
-        FROM students s
-        LEFT JOIN classes c ON s.class_id = c.id
-        LEFT JOIN sections sec ON s.section_id = sec.id
-        WHERE s.id IN ($placeholders) AND s.status='active'
-        ORDER BY s.roll_number");
-    $stmt->execute($ids);
-    $students = $stmt->fetchAll();
-} elseif ($filterClass) {
-    $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
-        FROM students s
-        LEFT JOIN classes c ON s.class_id = c.id
-        LEFT JOIN sections sec ON s.section_id = sec.id
-        WHERE s.class_id=? AND s.status='active'
-        ORDER BY s.roll_number");
-    $stmt->execute([$filterClass]);
-    $students = $stmt->fetchAll();
+// ===== ডেটা লোড (ধরন অনুযায়ী) =====
+$students = []; // সব ধরনের কার্ডই এই array তে থাকবে
+
+if ($type === 'teacher') {
+    // শিক্ষক লোড
+    if ($filterIds) {
+        $ids = array_map('intval', explode(',', $filterIds));
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $db->prepare("SELECT *, teacher_id_no AS student_id, name_bn, name,
+            designation_bn, phone AS father_phone, blood_group,
+            '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
+            FROM teachers WHERE id IN ($placeholders) AND is_active=1 ORDER BY name_bn");
+        $stmt->execute($ids);
+        $students = $stmt->fetchAll();
+    } else {
+        $students = $db->query("SELECT *, teacher_id_no AS student_id, name_bn, name,
+            designation_bn, phone AS father_phone, blood_group,
+            '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
+            FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
+    }
+
+} elseif ($type === 'staff') {
+    // স্টাফ লোড
+    if ($filterIds) {
+        $ids = array_map('intval', explode(',', $filterIds));
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $db->prepare("SELECT *, staff_id AS student_id, name_bn, name,
+            designation_bn, phone AS father_phone, blood_group,
+            '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
+            FROM staff WHERE id IN ($placeholders) AND is_active=1 ORDER BY name_bn");
+        $stmt->execute($ids);
+        $students = $stmt->fetchAll();
+    } else {
+        $students = $db->query("SELECT *, staff_id AS student_id, name_bn, name,
+            designation_bn, phone AS father_phone, blood_group,
+            '' AS class_name_bn, '' AS section_name, '' AS roll_number, '' AS father_name_bn
+            FROM staff WHERE is_active=1 ORDER BY name_bn")->fetchAll();
+    }
+
+} else {
+    // ছাত্র লোড
+    if ($filterIds) {
+        $ids = array_map('intval', explode(',', $filterIds));
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
+            FROM students s
+            LEFT JOIN classes c ON s.class_id = c.id
+            LEFT JOIN sections sec ON s.section_id = sec.id
+            WHERE s.id IN ($placeholders) AND s.status='active'
+            ORDER BY s.roll_number");
+        $stmt->execute($ids);
+        $students = $stmt->fetchAll();
+    } elseif ($filterClass) {
+        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
+            FROM students s
+            LEFT JOIN classes c ON s.class_id = c.id
+            LEFT JOIN sections sec ON s.section_id = sec.id
+            WHERE s.class_id=? AND s.status='active'
+            ORDER BY s.roll_number");
+        $stmt->execute([$filterClass]);
+        $students = $stmt->fetchAll();
+    }
 }
 
-$instituteName   = getSetting('institute_name', 'আন নাজাহ তাহফিজুল কুরআন মাদরাসা');
-$instituteNameEn = getSetting('institute_name_en', 'An Nazah Tahfizul Quran Madrasah');
+$instituteName    = getSetting('institute_name', 'আন নাজাহ তাহফিজুল কুরআন মাদরাসা');
 $instituteAddress = getSetting('address', 'পান্ধোয়া বাজার, আশুলিয়া, সাভার, ঢাকা');
-$institutePhone  = getSetting('phone', '01715-821661');
-$instituteWeb    = getSetting('website', 'www.annazah.com');
-$logoPath        = getSetting('logo', '');
+$institutePhone   = getSetting('phone', '01715-821661');
+$instituteWeb     = getSetting('website', 'www.annazah.com');
+$logoPath         = getSetting('logo', '');
 
 require_once '../../includes/header.php';
 ?>
@@ -59,14 +98,17 @@ require_once '../../includes/header.php';
     <div class="card-body" style="padding:16px 20px;">
         <form method="GET" id="filterForm">
             <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;">
+                <!-- ধরন -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                     <label style="font-size:12px;">ধরন</label>
-                    <select name="type" class="form-control" style="padding:8px;">
+                    <select name="type" class="form-control" style="padding:8px;" onchange="onTypeChange(this)">
                         <option value="student" <?= $type==='student'?'selected':'' ?>>ছাত্র</option>
                         <option value="teacher" <?= $type==='teacher'?'selected':'' ?>>শিক্ষক</option>
+                        <option value="staff"   <?= $type==='staff'  ?'selected':'' ?>>স্টাফ</option>
                     </select>
                 </div>
-                <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+                <!-- শ্রেণী (শুধু ছাত্রের জন্য) -->
+                <div class="form-group" style="margin:0;flex:1;min-width:160px;" id="classDiv" <?= $type!=='student'?'style="display:none;"':'' ?>>
                     <label style="font-size:12px;">শ্রেণী</label>
                     <select name="class_id" class="form-control" style="padding:8px;" onchange="this.form.submit()">
                         <option value="">সব শ্রেণী</option>
@@ -75,19 +117,25 @@ require_once '../../includes/header.php';
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <!-- ডিজাইন -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                     <label style="font-size:12px;">ডিজাইন</label>
                     <select name="design" class="form-control" style="padding:8px;" onchange="this.form.submit()">
-                        <option value="modern"  <?= $design==='modern'?'selected':'' ?>>🔵 মডার্ন (নীল-কমলা)</option>
-                        <option value="green"   <?= $design==='green'?'selected':'' ?>>🟢 গ্রিন (সবুজ-সাদা)</option>
+                        <option value="modern"  <?= $design==='modern' ?'selected':'' ?>>🔵 মডার্ন (নীল-কমলা)</option>
+                        <option value="green"   <?= $design==='green'  ?'selected':'' ?>>🟢 গ্রিন (সবুজ-সাদা)</option>
                         <option value="classic" <?= $design==='classic'?'selected':'' ?>>⚫ ক্লাসিক (গাঢ় নীল)</option>
-                        <option value="maroon"  <?= $design==='maroon'?'selected':'' ?>>🔴 মেরুন (ঐতিহ্যবাহী)</option>
+                        <option value="maroon"  <?= $design==='maroon' ?'selected':'' ?>>🔴 মেরুন (ঐতিহ্যবাহী)</option>
                     </select>
                 </div>
             </div>
         </form>
 
-        <?php if ($filterClass && !empty($students)): ?>
+        <?php
+        // শিক্ষক/স্টাফ: সরাসরি সবাই দেখা যাবে, নির্বাচন বাটন দেখাব
+        // ছাত্র: শ্রেণী বেছে নিলে তবে দেখাবে
+        $showCheckboxControls = ($type !== 'student') || ($filterClass && !empty($students));
+        if ($showCheckboxControls && !empty($students)):
+        ?>
         <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
             <span style="font-size:13px;color:var(--text-muted);">নির্বাচন করুন:</span>
             <button onclick="selectAll()" class="btn btn-outline btn-sm">সবাই</button>
@@ -98,11 +146,14 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- ছাত্র চেকবক্স তালিকা -->
-<?php if ($filterClass && !empty($students)): ?>
+<!-- চেকবক্স তালিকা -->
+<?php if (!empty($students) && (($type === 'student' && $filterClass) || $type !== 'student')): ?>
 <div class="card mb-16 no-print">
     <div class="card-header">
-        <span class="card-title">মোট <?= toBanglaNumber(count($students)) ?> জন ছাত্র</span>
+        <span class="card-title">
+            মোট <?= toBanglaNumber(count($students)) ?> জন
+            <?= $type==='teacher' ? 'শিক্ষক' : ($type==='staff' ? 'স্টাফ' : 'ছাত্র') ?>
+        </span>
     </div>
     <div class="card-body" style="padding:12px 20px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
@@ -110,8 +161,8 @@ require_once '../../includes/header.php';
             <label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;cursor:pointer;">
                 <input type="checkbox" class="student-check" value="<?= $s['id'] ?>" checked>
                 <div>
-                    <div style="font-size:13px;font-weight:600;"><?= e($s['name_bn']?:$s['name']) ?></div>
-                    <div style="font-size:11px;color:var(--text-muted);">রোল: <?= e($s['roll_number']) ?> | <?= e($s['student_id']) ?></div>
+                    <div style="font-size:13px;font-weight:600;"><?= e($s['name_bn'] ?: $s['name']) ?></div>
+                    <div style="font-size:11px;color:var(--text-muted);"><?= e($s['student_id'] ?? '') ?></div>
                 </div>
             </label>
             <?php endforeach; ?>
@@ -119,26 +170,28 @@ require_once '../../includes/header.php';
     </div>
 </div>
 <?php endif; ?>
-<?php endif; ?>
+<?php endif; // !$printMode ?>
 
 <!-- ===== আইডি কার্ড ===== -->
 <?php if (!empty($students)): ?>
 <div id="cardContainer" style="<?= $printMode ? '' : 'margin-top:24px;' ?>">
     <?php foreach($students as $s):
-        $name        = $s['name_bn'] ?: $s['name'];
-        $nameEn      = $s['name'] ?? '';
+        $name    = $s['name_bn'] ?: $s['name'];
+        $nameEn  = $s['name'] ?? '';
         $nameParts   = explode(' ', $nameEn, 2);
         $firstNameEn = $nameParts[0] ?? '';
         $lastNameEn  = $nameParts[1] ?? '';
-        // photo field এ Cloudinary URL (https://...) অথবা পুরানো local path থাকতে পারে
+
+        // PHP 7 compatible: str_starts_with নেই, strpos দিয়ে করব
         $rawPhoto = $s['photo'] ?? '';
-        if (str_starts_with($rawPhoto, 'http')) {
+        if ($rawPhoto && strpos($rawPhoto, 'http') === 0) {
             $photoUrl = $rawPhoto; // Cloudinary full URL
         } elseif ($rawPhoto) {
-            $photoUrl = BASE_URL . '/assets/uploads/' . $rawPhoto; // পুরানো local path
+            $photoUrl = BASE_URL . '/assets/uploads/' . $rawPhoto;
         } else {
             $photoUrl = '';
         }
+
         $classNameBn = $s['class_name_bn'] ?? '';
         $section     = $s['section_name'] ?? '';
         $roll        = $s['roll_number'] ?? '';
@@ -159,7 +212,6 @@ require_once '../../includes/header.php';
 
                 <div class="back-bottom">
                     <div class="back-qr">
-                        <!-- QR placeholder -->
                         <div class="qr-box">
                             <svg viewBox="0 0 100 100" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
                                 <rect x="5" y="5" width="35" height="35" rx="3" fill="none" stroke="#e67e22" stroke-width="4"/>
@@ -196,8 +248,7 @@ require_once '../../includes/header.php';
         </div>
 
         <!-- ===== সামনের দিক (Front) ===== -->
-        <div class="id-card card-front <?= $type ?>">
-            <!-- বাম পাশের সবুজ-কমলা diagonal strip -->
+        <div class="id-card card-front <?= e($type) ?>">
             <div class="front-strip">
                 <div class="strip-green"></div>
                 <div class="strip-orange"></div>
@@ -210,7 +261,6 @@ require_once '../../includes/header.php';
                 </div>
             </div>
 
-            <!-- মূল কন্টেন্ট -->
             <div class="front-body">
                 <!-- লোগো ও নাম -->
                 <div class="front-header">
@@ -225,16 +275,16 @@ require_once '../../includes/header.php';
                     </div>
                 </div>
 
-                <!-- ছাত্রের ছবি -->
+                <!-- ছবি -->
                 <div class="front-photo-wrap">
                     <?php if($photoUrl): ?>
-                    <img src="<?= $photoUrl ?>" class="front-photo" alt="photo">
+                    <img src="<?= e($photoUrl) ?>" class="front-photo" alt="photo">
                     <?php else: ?>
                     <div class="front-photo-avatar"><?= mb_substr($name, 0, 1) ?></div>
                     <?php endif; ?>
                 </div>
 
-                <!-- নাম ও তথ্য -->
+                <!-- নাম -->
                 <div class="front-name">
                     <span class="name-first"><?= e($firstNameEn ?: $name) ?></span>
                     <?php if($lastNameEn): ?>
@@ -266,22 +316,22 @@ require_once '../../includes/header.php';
 </div>
 <?php elseif (!$printMode): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-muted);">
-    <i class="fas fa-id-card" style="font-size:48px;margin-bottom:16px;opacity:.3;"></i>
-    <p style="font-size:16px;">শ্রেণী নির্বাচন করুন অথবা ছাত্র বেছে নিন</p>
+    <i class="fas fa-id-card" style="font-size:48px;margin-bottom:16px;opacity:.3;display:block;"></i>
+    <p style="font-size:16px;">
+        <?= $type === 'student' ? 'শ্রেণী নির্বাচন করুন অথবা ছাত্র বেছে নিন' : 'কোনো তথ্য পাওয়া যায়নি' ?>
+    </p>
 </div></div>
 <?php endif; ?>
+
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
 
-/* ===== CARD PAIR (Front + Back side by side) ===== */
 .id-card-pair {
     display: inline-flex;
     gap: 12px;
     margin: 10px;
     vertical-align: top;
 }
-
-/* CR80 Portrait: 54mm × 85.6mm = 204px × 323px at 96dpi */
 .id-card {
     width: 204px;
     height: 323px;
@@ -291,14 +341,11 @@ require_once '../../includes/header.php';
     position: relative;
     font-family: 'Hind Siliguri', sans-serif;
 }
-
-/* ===== FRONT ===== */
+/* FRONT */
 .card-front {
     background: #fff;
     display: flex;
 }
-
-/* বাম strip */
 .front-strip {
     width: 30px;
     position: relative;
@@ -323,38 +370,24 @@ require_once '../../includes/header.php';
     clip-path: polygon(0 15%, 100% 0, 100% 100%, 0 100%);
 }
 .strip-label {
-    position: relative;
-    z-index: 2;
-    color: #fff;
-    font-size: 9px;
-    font-weight: 700;
+    position: relative; z-index: 2;
+    color: #fff; font-size: 9px; font-weight: 700;
     letter-spacing: 2px;
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
+    writing-mode: vertical-rl; text-orientation: mixed;
     transform: rotate(180deg);
     white-space: nowrap;
     text-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
-
-/* মূল কন্টেন্ট */
 .front-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+    flex: 1; display: flex; flex-direction: column;
     padding: 8px 8px 8px 6px;
 }
 .front-header {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    display: flex; align-items: center; gap: 5px;
     border-bottom: 2px solid #1a8a3c;
-    padding-bottom: 5px;
-    margin-bottom: 6px;
+    padding-bottom: 5px; margin-bottom: 6px;
 }
-.front-logo {
-    width: 32px; height: 32px;
-    object-fit: contain; flex-shrink: 0;
-}
+.front-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .front-logo-placeholder {
     width: 32px; height: 32px;
     background: linear-gradient(135deg,#1a8a3c,#e67e22);
@@ -371,18 +404,10 @@ require_once '../../includes/header.php';
     font-size: 6.5px; color: #1a8a3c; font-weight: 700;
     line-height: 1.3; text-align: center;
 }
-
-/* ছবি */
-.front-photo-wrap {
-    text-align: center;
-    margin: 4px 0;
-}
+.front-photo-wrap { text-align: center; margin: 4px 0; }
 .front-photo {
-    width: 80px; height: 95px;
-    object-fit: cover;
-    border: 3px solid #e67e22;
-    border-radius: 4px;
-    display: inline-block;
+    width: 80px; height: 95px; object-fit: cover;
+    border: 3px solid #e67e22; border-radius: 4px; display: inline-block;
 }
 .front-photo-avatar {
     width: 80px; height: 95px;
@@ -393,123 +418,42 @@ require_once '../../includes/header.php';
     align-items: center; justify-content: center;
     font-size: 32px; font-weight: 700; color: #1a8a3c;
 }
-
-/* নাম */
-.front-name {
-    text-align: center;
-    margin-top: 6px;
-    line-height: 1.2;
-}
-.name-first {
-    font-size: 14px; font-weight: 700; color: #1a8a3c;
-    font-family: 'Libre Baskerville', serif;
-}
-.name-last {
-    font-size: 14px; font-weight: 400; color: #333;
-    font-family: 'Libre Baskerville', serif;
-}
-.front-id {
-    text-align: center;
-    font-size: 8.5px; font-weight: 700; color: #555;
-    margin: 2px 0 5px;
-    letter-spacing: 0.5px;
-}
-
-/* তথ্য টেবিল */
-.front-table {
-    border-top: 1px dashed #1a8a3c;
-    padding-top: 5px;
-}
-.front-row {
-    display: flex;
-    font-size: 8px;
-    line-height: 1.8;
-    color: #333;
-}
-.fr-label {
-    width: 38px;
-    color: #1a5276;
-    font-weight: 600;
-}
+.front-name { text-align: center; margin-top: 6px; line-height: 1.2; }
+.name-first { font-size: 14px; font-weight: 700; color: #1a8a3c; font-family: 'Libre Baskerville', serif; }
+.name-last  { font-size: 14px; font-weight: 400; color: #333; font-family: 'Libre Baskerville', serif; }
+.front-id { text-align: center; font-size: 8.5px; font-weight: 700; color: #555; margin: 2px 0 5px; letter-spacing: 0.5px; }
+.front-table { border-top: 1px dashed #1a8a3c; padding-top: 5px; }
+.front-row { display: flex; font-size: 8px; line-height: 1.8; color: #333; }
+.fr-label { width: 38px; color: #1a5276; font-weight: 600; }
 .fr-val { flex: 1; }
 
-/* ===== BACK ===== */
+/* BACK */
 .card-back {
-    background: #fff;
-    border: 1px solid #ddd;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
+    background: #fff; border: 1px solid #ddd;
+    display: flex; flex-direction: column;
+    position: relative; overflow: hidden;
 }
 .back-watermark {
-    position: absolute;
-    top: 50%; left: 50%;
+    position: absolute; top: 50%; left: 50%;
     transform: translate(-50%,-50%);
-    font-size: 90px;
-    color: rgba(26,138,60,.06);
-    pointer-events: none;
+    font-size: 90px; color: rgba(26,138,60,.06); pointer-events: none;
 }
 .back-content {
     padding: 12px 10px 8px;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    position: relative;
-    z-index: 1;
+    display: flex; flex-direction: column; height: 100%;
+    position: relative; z-index: 1;
 }
-.back-title {
-    font-size: 10px;
-    font-weight: 700;
-    color: #1a5276;
-    text-align: center;
-    margin-bottom: 7px;
-    font-family: 'Libre Baskerville', serif;
-}
-.back-text {
-    font-size: 6.5px;
-    color: #444;
-    line-height: 1.7;
-    text-align: justify;
-    flex: 1;
-}
-.back-bottom {
-    margin-top: 8px;
-    border-top: 1px solid #e67e22;
-    padding-top: 7px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-.back-qr {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.qr-box {
-    background: #fff8f0;
-    border: 1px solid #e67e22;
-    border-radius: 4px;
-    padding: 3px;
-}
+.back-title { font-size: 10px; font-weight: 700; color: #1a5276; text-align: center; margin-bottom: 7px; font-family: 'Libre Baskerville', serif; }
+.back-text { font-size: 6.5px; color: #444; line-height: 1.7; text-align: justify; flex: 1; }
+.back-bottom { margin-top: 8px; border-top: 1px solid #e67e22; padding-top: 7px; display: flex; flex-direction: column; gap: 5px; }
+.back-qr { display: flex; align-items: center; justify-content: space-between; }
+.qr-box { background: #fff8f0; border: 1px solid #e67e22; border-radius: 4px; padding: 3px; }
 .back-sig { text-align: center; }
-.sig-line {
-    width: 60px;
-    border-top: 1px solid #333;
-    margin: 0 auto 2px;
-}
-.sig-text {
-    font-size: 6px;
-    color: #555;
-}
-.back-address {
-    font-size: 6.5px;
-    color: #444;
-    text-align: center;
-    line-height: 1.6;
-}
+.sig-line { width: 60px; border-top: 1px solid #333; margin: 0 auto 2px; }
+.sig-text { font-size: 6px; color: #555; }
+.back-address { font-size: 6.5px; color: #444; text-align: center; line-height: 1.6; }
 
-/* ===== TEACHER CARD — নীল-সোনালি ===== */
+/* TEACHER — নীল-সোনালি */
 .card-front.teacher .strip-green { background: #1a3a6b; }
 .card-front.teacher .strip-orange { background: #c9a227; }
 .card-front.teacher .front-header { border-bottom-color: #1a3a6b; }
@@ -522,7 +466,7 @@ require_once '../../includes/header.php';
 .card-front.teacher .fr-label { color: #1a3a6b; }
 .card-front.teacher .front-table { border-top-color: #c9a227; }
 
-/* ===== STAFF CARD — বেগুনি-রুপালি ===== */
+/* STAFF — বেগুনি-রুপালি */
 .card-front.staff .strip-green { background: #5b2c8c; }
 .card-front.staff .strip-orange { background: #8e44ad; }
 .card-front.staff .front-header { border-bottom-color: #5b2c8c; }
@@ -535,47 +479,44 @@ require_once '../../includes/header.php';
 .card-front.staff .fr-label { color: #5b2c8c; }
 .card-front.staff .front-table { border-top-color: #8e44ad; }
 
-/* ===== PRINT ===== */
+/* PRINT */
 @media print {
     .no-print { display: none !important; }
     body { margin: 0; padding: 0; background: #fff; }
-    #cardContainer {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5mm;
-        padding: 5mm;
-    }
+    #cardContainer { display: flex; flex-wrap: wrap; gap: 5mm; padding: 5mm; }
     .id-card-pair { margin: 0; }
-    .id-card {
-        box-shadow: none;
-        border: 1px solid #ccc;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-    }
+    .id-card { box-shadow: none; border: 1px solid #ccc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .sidebar, .topbar, header, nav { display: none !important; }
     .main-wrapper { margin-left: 0 !important; }
     .content { padding: 0 !important; }
 }
-
-@page {
-    size: A4 portrait;
-    margin: 8mm;
-}
+@page { size: A4 portrait; margin: 8mm; }
 </style>
 
 <script>
+function onTypeChange(sel) {
+    var classDiv = document.getElementById('classDiv');
+    if (classDiv) {
+        classDiv.style.display = sel.value === 'student' ? '' : 'none';
+    }
+    // class_id রিসেট করে ফর্ম সাবমিট
+    var classSelect = document.querySelector('select[name="class_id"]');
+    if (classSelect) classSelect.value = '';
+    sel.form.submit();
+}
 function selectAll() {
-    document.querySelectorAll('.student-check').forEach(c => c.checked = true);
+    document.querySelectorAll('.student-check').forEach(function(c){ c.checked = true; });
 }
 function selectNone() {
-    document.querySelectorAll('.student-check').forEach(c => c.checked = false);
+    document.querySelectorAll('.student-check').forEach(function(c){ c.checked = false; });
 }
 function generateSelected() {
-    const ids = [...document.querySelectorAll('.student-check:checked')].map(c => c.value);
-    if (!ids.length) { alert('কমপক্ষে একজন ছাত্র নির্বাচন করুন।'); return; }
-    const params = new URLSearchParams(window.location.search);
+    var ids = [];
+    document.querySelectorAll('.student-check:checked').forEach(function(c){ ids.push(c.value); });
+    if (!ids.length) { alert('কমপক্ষে একজন নির্বাচন করুন।'); return; }
+    var params = new URLSearchParams(window.location.search);
     params.set('ids', ids.join(','));
-    params.delete('class_id');
+    params.delete('class_id'); // class_id না থাকলে ids দিয়ে লোড হবে
     window.location.href = '?' + params.toString();
 }
 function printCards() {
