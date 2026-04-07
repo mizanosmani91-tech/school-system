@@ -45,8 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_POST['remove_logo']) && $_POST['remove_logo'] === '1') {
         saveIdcs('id_card_logo_b64', '');
     }
-    // লোগো SVG আপলোড
-    elseif (!empty($_FILES['logo_svg']['tmp_name']) && $_FILES['logo_svg']['error'] === UPLOAD_ERR_OK) {
+
+    // লোগো আপলোড (remove_logo না থাকলে)
+    if (empty($_POST['remove_logo']) && !empty($_FILES['logo_svg']['tmp_name']) && $_FILES['logo_svg']['error'] === UPLOAD_ERR_OK) {
         $ext = strtolower(pathinfo($_FILES['logo_svg']['name'], PATHINFO_EXTENSION));
         if (in_array($ext, ['svg','png','jpg','jpeg','webp'])) {
             $content = file_get_contents($_FILES['logo_svg']['tmp_name']);
