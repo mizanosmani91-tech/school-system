@@ -81,6 +81,49 @@ $institutePhone   = getSetting('phone', '01715-821661');
 $instituteWeb     = getSetting('website', 'www.annazah.com');
 $logoPath         = getSetting('logo', '');
 
+// ===== ডিজাইন সেটিংস লোড =====
+$idc = [
+    'logo'        => getSetting('id_card_logo_b64',''),
+    'strip_svg'   => getSetting('id_card_strip_svg',''),
+    'use_svg'     => getSetting('id_card_strip_use_custom_svg','0'),
+    'sc1'         => getSetting('id_card_strip_color1','#1a8a3c'),
+    'sc2'         => getSetting('id_card_strip_color2','#e67e22'),
+    'label_font'  => getSetting('id_card_label_font','Hind Siliguri'),
+    'label_size'  => getSetting('id_card_label_size','9'),
+    'label_w'     => getSetting('id_card_label_weight','700'),
+    'label_style' => getSetting('id_card_label_style','normal'),
+    'label_color' => getSetting('id_card_label_color','#ffffff'),
+    'label_ls'    => getSetting('id_card_label_spacing','2'),
+    'name_font'   => getSetting('id_card_name_font','Libre Baskerville'),
+    'name_size'   => getSetting('id_card_name_size','14'),
+    'name_w'      => getSetting('id_card_name_weight','700'),
+    'name_color'  => getSetting('id_card_name_color','#1a8a3c'),
+    'id_font'     => getSetting('id_card_id_font','Hind Siliguri'),
+    'id_size'     => getSetting('id_card_id_size','8.5'),
+    'id_color'    => getSetting('id_card_id_color','#555555'),
+    'tb_font'     => getSetting('id_card_table_font','Hind Siliguri'),
+    'tb_size'     => getSetting('id_card_table_size','8'),
+    'tb_lc'       => getSetting('id_card_table_label_color','#1a5276'),
+    'tb_vc'       => getSetting('id_card_table_val_color','#333333'),
+    'ar_font'     => getSetting('id_card_arabic_font','Hind Siliguri'),
+    'ar_size'     => getSetting('id_card_arabic_size','7.5'),
+    'ar_color'    => getSetting('id_card_arabic_color','#1a5276'),
+    'bn_font'     => getSetting('id_card_bn_font','Hind Siliguri'),
+    'bn_size'     => getSetting('id_card_bn_size','6.5'),
+    'bn_color'    => getSetting('id_card_bn_color','#1a8a3c'),
+    's_c1'        => getSetting('id_card_student_color1','#1a8a3c'),
+    's_c2'        => getSetting('id_card_student_color2','#e67e22'),
+    't_c1'        => getSetting('id_card_teacher_color1','#1a3a6b'),
+    't_c2'        => getSetting('id_card_teacher_color2','#c9a227'),
+    'sf_c1'       => getSetting('id_card_staff_color1','#5b2c8c'),
+    'sf_c2'       => getSetting('id_card_staff_color2','#8e44ad'),
+    'photo_bc'    => getSetting('id_card_photo_border_color','#e67e22'),
+    'radius'      => getSetting('id_card_border_radius','10'),
+];
+if ($type === 'teacher')   { $idc['c1']=$idc['t_c1'];  $idc['c2']=$idc['t_c2'];  }
+elseif ($type === 'staff') { $idc['c1']=$idc['sf_c1']; $idc['c2']=$idc['sf_c2']; }
+else                       { $idc['c1']=$idc['s_c1'];  $idc['c2']=$idc['s_c2'];  }
+
 require_once '../../includes/header.php';
 ?>
 
@@ -88,9 +131,12 @@ require_once '../../includes/header.php';
 <!-- ===== কন্ট্রোল প্যানেল ===== -->
 <div class="section-header no-print">
     <h2 class="section-title"><i class="fas fa-id-card"></i> আইডি কার্ড জেনারেটর</h2>
-    <?php if (!empty($students)): ?>
-    <button onclick="printCards()" class="btn btn-primary"><i class="fas fa-print"></i> প্রিন্ট / PDF ডাউনলোড</button>
-    <?php endif; ?>
+    <div style="display:flex;gap:8px;">
+        <a href="id_card_settings.php" class="btn btn-outline btn-sm"><i class="fas fa-palette"></i> ডিজাইন সেটিংস</a>
+        <?php if (!empty($students)): ?>
+        <button onclick="printCards()" class="btn btn-primary"><i class="fas fa-print"></i> প্রিন্ট / PDF ডাউনলোড</button>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- ফিল্টার -->
@@ -248,11 +294,22 @@ require_once '../../includes/header.php';
         </div>
 
         <!-- ===== সামনের দিক (Front) ===== -->
-        <div class="id-card card-front <?= e($type) ?>">
+        <div class="id-card card-front <?= e($type) ?>" style="border-radius:<?= (int)$idc['radius'] ?>px;">
+            <!-- সাইড স্ট্রিপ -->
             <div class="front-strip">
-                <div class="strip-green"></div>
-                <div class="strip-orange"></div>
-                <div class="strip-label">
+                <?php if ($idc['use_svg'] === '1' && $idc['strip_svg']): ?>
+                    <div style="position:absolute;inset:0;overflow:hidden;"><?= $idc['strip_svg'] ?></div>
+                <?php else: ?>
+                    <div class="strip-green" style="background:<?= e($idc['sc1']) ?>;"></div>
+                    <div class="strip-orange" style="background:<?= e($idc['sc2']) ?>;"></div>
+                <?php endif; ?>
+                <div class="strip-label" style="
+                    font-family:'<?= e($idc['label_font']) ?>',sans-serif;
+                    font-size:<?= e($idc['label_size']) ?>px;
+                    font-weight:<?= e($idc['label_w']) ?>;
+                    font-style:<?= e($idc['label_style']) ?>;
+                    color:<?= e($idc['label_color']) ?>;
+                    letter-spacing:<?= e($idc['label_ls']) ?>px;">
                     <?php
                     if ($type === 'teacher') echo 'TEACHER ID CARD';
                     elseif ($type === 'staff') echo 'STAFF ID CARD';
@@ -262,50 +319,83 @@ require_once '../../includes/header.php';
             </div>
 
             <div class="front-body">
-                <!-- লোগো ও নাম -->
-                <div class="front-header">
-                    <?php if($logoPath): ?>
+                <!-- লোগো ও প্রতিষ্ঠানের নাম -->
+                <div class="front-header" style="border-bottom-color:<?= e($idc['c1']) ?>;">
+                    <?php if($idc['logo']): ?>
+                    <img src="<?= $idc['logo'] ?>" class="front-logo" alt="logo">
+                    <?php elseif($logoPath): ?>
                     <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" alt="logo">
                     <?php else: ?>
-                    <div class="front-logo-placeholder"><i class="fas fa-mosque"></i></div>
+                    <div class="front-logo-placeholder" style="background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);"><i class="fas fa-mosque"></i></div>
                     <?php endif; ?>
                     <div class="front-institute">
-                        <div class="front-institute-arabic">مدرسة النجاح لتحفيظ القرآن</div>
-                        <div class="front-institute-bn"><?= e($instituteName) ?></div>
+                        <div class="front-institute-arabic" style="
+                            font-family:'<?= e($idc['ar_font']) ?>',sans-serif;
+                            font-size:<?= e($idc['ar_size']) ?>px;
+                            color:<?= e($idc['ar_color']) ?>;">
+                            مدرسة النجاح لتحفيظ القرآن
+                        </div>
+                        <div class="front-institute-bn" style="
+                            font-family:'<?= e($idc['bn_font']) ?>',sans-serif;
+                            font-size:<?= e($idc['bn_size']) ?>px;
+                            color:<?= e($idc['bn_color']) ?>;">
+                            <?= e($instituteName) ?>
+                        </div>
                     </div>
                 </div>
 
-                <!-- ছবি -->
+                <!-- ছাত্রের ছবি -->
                 <div class="front-photo-wrap">
                     <?php if($photoUrl): ?>
-                    <img src="<?= e($photoUrl) ?>" class="front-photo" alt="photo">
+                    <img src="<?= e($photoUrl) ?>" class="front-photo" style="border-color:<?= e($idc['photo_bc']) ?>;" alt="photo">
                     <?php else: ?>
-                    <div class="front-photo-avatar"><?= mb_substr($name, 0, 1) ?></div>
+                    <div class="front-photo-avatar" style="border-color:<?= e($idc['photo_bc']) ?>;color:<?= e($idc['c1']) ?>;"><?= mb_substr($name, 0, 1) ?></div>
                     <?php endif; ?>
                 </div>
 
                 <!-- নাম -->
                 <div class="front-name">
-                    <span class="name-first"><?= e($firstNameEn ?: $name) ?></span>
+                    <span class="name-first" style="
+                        font-family:'<?= e($idc['name_font']) ?>',serif;
+                        font-size:<?= e($idc['name_size']) ?>px;
+                        font-weight:<?= e($idc['name_w']) ?>;
+                        color:<?= e($idc['name_color']) ?>;">
+                        <?= e($firstNameEn ?: $name) ?>
+                    </span>
                     <?php if($lastNameEn): ?>
-                    <span class="name-last"> <?= e($lastNameEn) ?></span>
+                    <span class="name-last" style="
+                        font-family:'<?= e($idc['name_font']) ?>',serif;
+                        font-size:<?= e($idc['name_size']) ?>px;">
+                        <?= e($lastNameEn) ?>
+                    </span>
                     <?php endif; ?>
                 </div>
-                <div class="front-id">ID: <?= e($stuId) ?></div>
+                <div class="front-id" style="
+                    font-family:'<?= e($idc['id_font']) ?>',sans-serif;
+                    font-size:<?= e($idc['id_size']) ?>px;
+                    color:<?= e($idc['id_color']) ?>;">
+                    ID: <?= e($stuId) ?>
+                </div>
 
-                <div class="front-table">
+                <div class="front-table" style="border-top-color:<?= e($idc['c1']) ?>;">
+                    <?php
+                    // টেবিল সারির ইনলাইন স্টাইল
+                    $rowStyle  = 'font-family:\'' . e($idc['tb_font']) . '\',sans-serif;font-size:' . e($idc['tb_size']) . 'px;';
+                    $lblStyle  = 'color:' . e($idc['tb_lc']) . ';';
+                    $valStyle  = 'color:' . e($idc['tb_vc']) . ';';
+                    ?>
                     <?php if ($type === 'teacher' || $type === 'staff'): ?>
-                    <div class="front-row"><span class="fr-label">পদবী</span><span class="fr-val">:<?= e($s['designation_bn'] ?? '-') ?></span></div>
-                    <div class="front-row"><span class="fr-label">ID</span><span class="fr-val">:<?= e($stuId) ?></span></div>
-                    <div class="front-row"><span class="fr-label">Phone</span><span class="fr-val">:<?= e($phone) ?></span></div>
-                    <div class="front-row"><span class="fr-label">Blood</span><span class="fr-val">:<?= e($blood ?: 'N/A') ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">পদবী</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($s['designation_bn'] ?? '-') ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">ID</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($stuId) ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Phone</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($phone) ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Blood</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($blood ?: 'N/A') ?></span></div>
                     <?php else: ?>
-                    <div class="front-row"><span class="fr-label">Class</span><span class="fr-val">:<?= e($classNameBn) ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Class</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($classNameBn) ?></span></div>
                     <?php if($section): ?>
-                    <div class="front-row"><span class="fr-label">Group</span><span class="fr-val">:<?= e($section) ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Group</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($section) ?></span></div>
                     <?php endif; ?>
-                    <div class="front-row"><span class="fr-label">Roll</span><span class="fr-val">:<?= e($roll) ?></span></div>
-                    <div class="front-row"><span class="fr-label">Blood</span><span class="fr-val">:<?= e($blood ?: 'N/A') ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Roll</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($roll) ?></span></div>
+                    <div class="front-row" style="<?= $rowStyle ?>"><span class="fr-label" style="<?= $lblStyle ?>">Blood</span><span class="fr-val" style="<?= $valStyle ?>">:<?= e($blood ?: 'N/A') ?></span></div>
                     <?php endif; ?>
                 </div>
             </div>
