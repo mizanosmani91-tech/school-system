@@ -153,41 +153,82 @@ function logActivity($userId, $action, $module, $details = '') {
     } catch (Exception $e) { /* silent */ }
 }
 
-// AI API কল (Claude)
+// ================================================================
+// AI API কল (Google Gemini - বিনামূল্যে)
+// ================================================================
 function callAI($message, $systemPrompt = '', $history = []) {
-    $apiKey = getSetting('ai_api_key', AI_API_KEY);
-    if (empty($apiKey)) return ['error' => 'AI API Key সেট করা নেই।'];
+    $apiKey = getSetting('ai_api_key', '');
+    if (empty($apiKey)) {
+        return ['error' => 'AI API Key সেট করা নেই। Settings থেকে Google Gemini API Key দিন।'];
+    }
 
-    $messages = [];
-    foreach ($history as $h) $messages[] = $h;
-    $messages[] = ['role' => 'user', 'content' => $message];
+    // Gemini এর জন্য contents array তৈরি
+    $contents = [];
+
+    // System prompt কে প্রথম user/model turn হিসেবে পাঠাতে হয়
+    if (!empty($systemPrompt)) {
+        $contents[] = [
+            'role'  => 'user',
+            'parts' => [['text' => $systemPrompt]]
+        ];
+        $contents[] = [
+            'role'  => 'model',
+            'parts' => [['text' => 'বুঝেছি। আমি সেভাবেই সাহায্য করব।']]
+        ];
+    }
+
+    // Chat history (শেষ ১০টি)
+    foreach ($history as $h) {
+        $role = ($h['role'] === 'assistant') ? 'model' : 'user';
+        $contents[] = [
+            'role'  => $role,
+            'parts' => [['text' => $h['content']]]
+        ];
+    }
+
+    // বর্তমান message
+    $contents[] = [
+        'role'  => 'user',
+        'parts' => [['text' => $message]]
+    ];
 
     $body = [
-        'model'      => AI_MODEL,
-        'max_tokens' => 1024,
-        'messages'   => $messages,
+        'contents'         => $contents,
+        'generationConfig' => [
+            'maxOutputTokens' => 1024,
+            'temperature'     => 0.7,
+        ]
     ];
-    if ($systemPrompt) $body['system'] = $systemPrompt;
 
-    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    // Gemini 1.5 Flash — সম্পূর্ণ বিনামূল্যে (daily 1500 requests)
+    $model = 'gemini-1.5-flash';
+    $url   = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+
+    $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode($body),
-        CURLOPT_HTTPHEADER     => [
-            'Content-Type: application/json',
-            'x-api-key: ' . $apiKey,
-            'anthropic-version: 2023-06-01',
-        ],
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 30,
     ]);
-    $resp = curl_exec($ch);
+    $resp     = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
+
     $data = json_decode($resp, true);
-    if (isset($data['content'][0]['text'])) {
-        return ['success' => true, 'text' => $data['content'][0]['text']];
+
+    // সফল response
+    if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
+        return [
+            'success' => true,
+            'text'    => $data['candidates'][0]['content']['parts'][0]['text']
+        ];
     }
-    return ['error' => $data['error']['message'] ?? 'অজানা ত্রুটি'];
+
+    // Error handle
+    $errMsg = $data['error']['message'] ?? ('অজানা ত্রুটি (HTTP ' . $httpCode . ')');
+    return ['error' => $errMsg];
 }
 
 // Flash Message
