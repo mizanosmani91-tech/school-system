@@ -65,58 +65,394 @@ for ($i = 6; $i >= 0; $i--) {
 require_once 'includes/header.php';
 ?>
 
-<!-- STAT CARDS -->
-<div class="stat-grid">
-    <div class="stat-card blue">
-        <div class="stat-icon"><i class="fas fa-user-graduate"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($totalStudents) ?></div>
-            <div class="stat-label">মোট ছাত্র (সক্রিয়)</div>
-        </div>
+<?php
+// ===== CARD DATA (PHP থেকে JS এ পাঠানো হবে) =====
+$allCards = [
+    ['id'=>'students',   'color'=>'blue',   'icon'=>'fa-user-graduate',      'value'=> toBanglaNumber($totalStudents),        'label'=>'মোট ছাত্র (সক্রিয়)'],
+    ['id'=>'teachers',   'color'=>'green',  'icon'=>'fa-chalkboard-teacher', 'value'=> toBanglaNumber($totalTeachers),        'label'=>'মোট শিক্ষক'],
+    ['id'=>'attendance', 'color'=>'orange', 'icon'=>'fa-clipboard-check',    'value'=> toBanglaNumber($attendanceRate).'%',   'label'=>'আজকের উপস্থিতি'],
+    ['id'=>'fee',        'color'=>'purple', 'icon'=>'fa-money-bill-wave',    'value'=> '৳'.number_format($monthlyFee),        'label'=>'এই মাসের ফি আদায়'],
+    ['id'=>'due',        'color'=>'red',    'icon'=>'fa-exclamation-circle', 'value'=> toBanglaNumber($dueCount),             'label'=>'ফি বকেয়া ছাত্র'],
+    ['id'=>'checkin',    'color'=>'green',  'icon'=>'fa-fingerprint',        'value'=> toBanglaNumber($teacherCheckedIn),     'label'=>'শিক্ষক আজ চেক ইন'],
+    ['id'=>'notcheckin', 'color'=>'red',    'icon'=>'fa-user-times',         'value'=> toBanglaNumber($teacherNotCheckedIn),  'label'=>'এখনো আসেননি'],
+    ['id'=>'checkout',   'color'=>'blue',   'icon'=>'fa-sign-out-alt',       'value'=> toBanglaNumber($teacherCheckedOut),    'label'=>'চেক আউট সম্পন্ন'],
+];
+?>
+
+<style>
+/* ===== CUSTOMIZE TOOLBAR ===== */
+.cbar {
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    background:#fff; border-radius:10px; padding:10px 16px;
+    margin-bottom:12px; box-shadow:var(--shadow);
+}
+.cbar-title { font-size:13px; font-weight:600; color:var(--text-muted); display:flex; align-items:center; gap:6px; }
+.cbar-actions { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+.cbar select {
+    padding:5px 10px; border-radius:7px; border:1.5px solid var(--border);
+    font-family:var(--font); font-size:13px; color:var(--text); background:#fff; cursor:pointer;
+}
+.cbar select:focus { outline:none; border-color:var(--primary-light); }
+
+/* ===== STAT GRID ===== */
+#statGrid {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap:16px; margin-bottom:24px;
+}
+
+/* Size variants */
+.stat-card.sz-small  { padding:12px 14px; }
+.stat-card.sz-small .stat-icon  { width:38px; height:38px; font-size:16px; }
+.stat-card.sz-small .stat-value { font-size:18px; }
+.stat-card.sz-small .stat-label { font-size:11px; }
+
+.stat-card.sz-large  { padding:28px 22px; }
+.stat-card.sz-large .stat-icon  { width:64px; height:64px; font-size:28px; }
+.stat-card.sz-large .stat-value { font-size:34px; }
+
+/* Hidden */
+.stat-card.card-hidden { display:none !important; }
+
+/* Drag */
+.stat-card.dragging  { opacity:.35; border:2px dashed var(--primary-light) !important; }
+.stat-card.drag-over { border:2px dashed var(--accent) !important; transform:scale(1.03); }
+
+/* Edit mode */
+.stat-card.edit-mode { cursor:grab; user-select:none; }
+.stat-card.edit-mode:active { cursor:grabbing; }
+.card-ctrl {
+    position:absolute; top:6px; right:6px;
+    display:none; gap:4px;
+}
+.stat-card { position:relative; }
+#statGrid.editing .card-ctrl { display:flex; }
+.card-ctrl button {
+    width:24px; height:24px; border-radius:5px; border:none; cursor:pointer;
+    font-size:11px; display:flex; align-items:center; justify-content:center; line-height:1;
+}
+.card-ctrl .btn-hide { background:#fee; color:var(--danger); }
+.card-ctrl .btn-sz   { background:#e8f4fd; color:var(--info); }
+
+/* Customize panel modal */
+.customize-panel {
+    position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000;
+    display:none; align-items:center; justify-content:center;
+}
+.customize-panel.open { display:flex; }
+.cp-box {
+    background:#fff; border-radius:14px; width:90%; max-width:520px;
+    box-shadow:0 20px 40px rgba(0,0,0,.2); overflow:hidden;
+}
+.cp-head {
+    padding:16px 20px; background:var(--primary); color:#fff;
+    display:flex; align-items:center; justify-content:space-between;
+}
+.cp-head h3 { font-size:16px; font-weight:700; margin:0; }
+.cp-head button { background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; }
+.cp-body { padding:16px 20px; max-height:70vh; overflow-y:auto; }
+.cp-card-row {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px; border-radius:8px; margin-bottom:8px;
+    border:1.5px solid var(--border); background:#fafafa;
+    transition:background .2s;
+}
+.cp-card-row:hover { background:#f0f4f8; }
+.cp-card-row .cp-icon {
+    width:36px; height:36px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;
+}
+.cp-card-row .cp-info { flex:1; }
+.cp-card-row .cp-label { font-size:13px; font-weight:600; color:var(--text); }
+.cp-card-row .cp-val   { font-size:12px; color:var(--text-muted); margin-top:1px; }
+.cp-card-row .cp-controls { display:flex; gap:6px; align-items:center; }
+.cp-toggle {
+    width:40px; height:22px; border-radius:11px; border:none; cursor:pointer;
+    background:var(--border); position:relative; transition:background .2s; flex-shrink:0;
+}
+.cp-toggle.on { background:var(--success); }
+.cp-toggle::after {
+    content:''; position:absolute; width:18px; height:18px; border-radius:50%;
+    background:#fff; top:2px; left:2px; transition:left .2s;
+    box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.cp-toggle.on::after { left:20px; }
+.cp-size-sel {
+    padding:4px 8px; border-radius:6px; border:1.5px solid var(--border);
+    font-family:var(--font); font-size:12px; cursor:pointer;
+}
+.cp-foot { padding:12px 20px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px; }
+
+/* Color icon backgrounds */
+.ci-blue   { background:#ebf5fb; color:var(--primary-light); }
+.ci-green  { background:#eafaf1; color:var(--success); }
+.ci-orange { background:#fef9e7; color:var(--accent); }
+.ci-red    { background:#fdedec; color:var(--danger); }
+.ci-purple { background:#f4ecf7; color:#8e44ad; }
+</style>
+
+<!-- Toolbar -->
+<div class="cbar">
+    <div class="cbar-title"><i class="fas fa-th-large"></i> ড্যাশবোর্ড কার্ডসমূহ</div>
+    <div class="cbar-actions">
+        <label class="cbar-title" style="gap:4px;">
+            <i class="fas fa-columns"></i> কলাম:
+        </label>
+        <select id="colSelect" onchange="setColumns(this.value)">
+            <option value="auto">অটো</option>
+            <option value="2">২টি</option>
+            <option value="3">৩টি</option>
+            <option value="4">৪টি</option>
+            <option value="5">৫টি</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="openCustomize()">
+            <i class="fas fa-sliders-h"></i> কাস্টমাইজ
+        </button>
+        <button class="btn btn-sm" id="editToggleBtn" onclick="toggleEditMode()" style="background:var(--primary);color:#fff;">
+            <i class="fas fa-arrows-alt"></i> সাজান
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="resetCards()" title="রিসেট">
+            <i class="fas fa-undo"></i>
+        </button>
     </div>
-    <div class="stat-card green">
-        <div class="stat-icon"><i class="fas fa-chalkboard-teacher"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($totalTeachers) ?></div>
-            <div class="stat-label">মোট শিক্ষক</div>
+</div>
+
+<!-- Stat Grid -->
+<div id="statGrid"></div>
+
+<!-- Customize Panel -->
+<div class="customize-panel" id="customizePanel">
+    <div class="cp-box">
+        <div class="cp-head">
+            <h3><i class="fas fa-sliders-h"></i> কার্ড কাস্টমাইজ করুন</h3>
+            <button onclick="closeCustomize()"><i class="fas fa-times"></i></button>
         </div>
-    </div>
-    <div class="stat-card orange">
-        <div class="stat-icon"><i class="fas fa-clipboard-check"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($attendanceRate) ?>%</div>
-            <div class="stat-label">আজকের উপস্থিতি</div>
-        </div>
-    </div>
-    <div class="stat-card purple">
-        <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
-        <div>
-            <div class="stat-value">৳<?= number_format($monthlyFee) ?></div>
-            <div class="stat-label">এই মাসের ফি আদায়</div>
-        </div>
-    </div>
-    <div class="stat-card red">
-        <div class="stat-icon"><i class="fas fa-exclamation-circle"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($dueCount) ?></div>
-            <div class="stat-label">ফি বকেয়া ছাত্র</div>
-        </div>
-    </div>
-    <div class="stat-card green">
-        <div class="stat-icon"><i class="fas fa-fingerprint"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($teacherCheckedIn) ?></div>
-            <div class="stat-label">শিক্ষক আজ চেক ইন</div>
-        </div>
-    </div>
-    <div class="stat-card red">
-        <div class="stat-icon"><i class="fas fa-user-times"></i></div>
-        <div>
-            <div class="stat-value"><?= toBanglaNumber($teacherNotCheckedIn) ?></div>
-            <div class="stat-label">এখনো আসেননি</div>
+        <div class="cp-body" id="cpBody"></div>
+        <div class="cp-foot">
+            <button class="btn btn-outline btn-sm" onclick="closeCustomize()">বাতিল</button>
+            <button class="btn btn-sm" style="background:var(--primary);color:#fff;" onclick="applyCustomize()">
+                <i class="fas fa-check"></i> সংরক্ষণ
+            </button>
         </div>
     </div>
 </div>
+
+<script>
+// ===== CARD DATA FROM PHP =====
+const ALL_CARDS = <?= json_encode($allCards, JSON_UNESCAPED_UNICODE) ?>;
+
+// ===== STATE =====
+const STORAGE_KEY = 'dashboard_cards_v2';
+let cardState = loadState();
+let editMode = false;
+let dragSrc = null;
+
+// Default state
+function defaultState() {
+    return ALL_CARDS.map(c => ({ id:c.id, visible:true, size:'normal', order: ALL_CARDS.findIndex(x=>x.id===c.id) }));
+}
+
+function loadState() {
+    try {
+        const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (s && Array.isArray(s) && s.length === ALL_CARDS.length) return s;
+    } catch(e) {}
+    return defaultState();
+}
+
+function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cardState));
+}
+
+function getCard(id) { return ALL_CARDS.find(c => c.id === id); }
+function getState(id) { return cardState.find(s => s.id === id); }
+
+// ===== RENDER =====
+function renderGrid() {
+    const grid = document.getElementById('statGrid');
+    grid.innerHTML = '';
+
+    // sort by order
+    const sorted = [...cardState].sort((a,b) => a.order - b.order);
+
+    sorted.forEach(st => {
+        const card = getCard(st.id);
+        if (!card) return;
+
+        const div = document.createElement('div');
+        div.className = `stat-card ${card.color}${st.size !== 'normal' ? ' sz-'+st.size : ''}${!st.visible ? ' card-hidden' : ''}${editMode ? ' edit-mode' : ''}`;
+        div.dataset.id = st.id;
+
+        div.innerHTML = `
+            <div class="stat-icon"><i class="fas ${card.icon}"></i></div>
+            <div>
+                <div class="stat-value">${card.value}</div>
+                <div class="stat-label">${card.label}</div>
+            </div>
+            <div class="card-ctrl">
+                <button class="btn-sz" onclick="cycleSize('${st.id}')" title="সাইজ"><i class="fas fa-text-height"></i></button>
+                <button class="btn-hide" onclick="hideCard('${st.id}')" title="লুকান"><i class="fas fa-eye-slash"></i></button>
+            </div>
+        `;
+
+        // Drag events
+        div.setAttribute('draggable', editMode);
+        div.addEventListener('dragstart', onDragStart);
+        div.addEventListener('dragover',  onDragOver);
+        div.addEventListener('dragleave', onDragLeave);
+        div.addEventListener('drop',      onDrop);
+        div.addEventListener('dragend',   onDragEnd);
+
+        grid.appendChild(div);
+    });
+}
+
+// ===== COLUMN CONTROL =====
+function setColumns(val) {
+    const grid = document.getElementById('statGrid');
+    grid.className = '';
+    if (val !== 'auto') grid.classList.add('grid-cols-' + val);
+    try { localStorage.setItem('dashboard_cols', val); } catch(e) {}
+}
+
+function loadColumns() {
+    try {
+        const c = localStorage.getItem('dashboard_cols') || 'auto';
+        document.getElementById('colSelect').value = c;
+        setColumns(c);
+    } catch(e) {}
+}
+
+// ===== EDIT MODE =====
+function toggleEditMode() {
+    editMode = !editMode;
+    const grid = document.getElementById('statGrid');
+    const btn  = document.getElementById('editToggleBtn');
+    grid.classList.toggle('editing', editMode);
+    if (editMode) {
+        btn.innerHTML = '<i class="fas fa-check"></i> সম্পন্ন';
+        btn.style.background = 'var(--success)';
+    } else {
+        btn.innerHTML = '<i class="fas fa-arrows-alt"></i> সাজান';
+        btn.style.background = 'var(--primary)';
+    }
+    renderGrid();
+}
+
+function cycleSize(id) {
+    const st = getState(id);
+    const sizes = ['normal','small','large'];
+    const idx = sizes.indexOf(st.size);
+    st.size = sizes[(idx+1) % sizes.length];
+    saveState(); renderGrid();
+}
+
+function hideCard(id) {
+    getState(id).visible = false;
+    saveState(); renderGrid();
+}
+
+// ===== DRAG & DROP =====
+function onDragStart(e) {
+    if (!editMode) return;
+    dragSrc = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e) {
+    e.preventDefault();
+    if (!editMode || this === dragSrc) return;
+    this.classList.add('drag-over');
+}
+function onDragLeave() { this.classList.remove('drag-over'); }
+function onDrop(e) {
+    e.preventDefault();
+    if (!editMode || this === dragSrc) return;
+    this.classList.remove('drag-over');
+    const srcId  = dragSrc.dataset.id;
+    const destId = this.dataset.id;
+    const srcSt  = getState(srcId);
+    const dstSt  = getState(destId);
+    const tmp = srcSt.order;
+    srcSt.order = dstSt.order;
+    dstSt.order = tmp;
+    saveState(); renderGrid();
+}
+function onDragEnd() {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('drag-over'));
+}
+
+// ===== CUSTOMIZE PANEL =====
+function openCustomize() {
+    const body = document.getElementById('cpBody');
+    body.innerHTML = '';
+    const sorted = [...cardState].sort((a,b) => a.order - b.order);
+    sorted.forEach(st => {
+        const card = getCard(st.id);
+        if (!card) return;
+        const row = document.createElement('div');
+        row.className = 'cp-card-row';
+        row.innerHTML = `
+            <div class="cp-icon ci-${card.color}"><i class="fas ${card.icon}"></i></div>
+            <div class="cp-info">
+                <div class="cp-label">${card.label}</div>
+                <div class="cp-val">${card.value}</div>
+            </div>
+            <div class="cp-controls">
+                <select class="cp-size-sel" data-id="${st.id}">
+                    <option value="small"  ${st.size==='small'  ? 'selected':''}>ছোট</option>
+                    <option value="normal" ${st.size==='normal' ? 'selected':''}>স্বাভাবিক</option>
+                    <option value="large"  ${st.size==='large'  ? 'selected':''}>বড়</option>
+                </select>
+                <button class="cp-toggle${st.visible ? ' on':''}" data-id="${st.id}" onclick="cpToggle(this, '${st.id}')"></button>
+            </div>
+        `;
+        body.appendChild(row);
+    });
+    document.getElementById('customizePanel').classList.add('open');
+}
+
+function cpToggle(btn, id) {
+    btn.classList.toggle('on');
+}
+
+function applyCustomize() {
+    document.querySelectorAll('.cp-toggle').forEach(btn => {
+        getState(btn.dataset.id).visible = btn.classList.contains('on');
+    });
+    document.querySelectorAll('.cp-size-sel').forEach(sel => {
+        getState(sel.dataset.id).size = sel.value;
+    });
+    saveState(); renderGrid();
+    closeCustomize();
+}
+
+function closeCustomize() {
+    document.getElementById('customizePanel').classList.remove('open');
+}
+
+function resetCards() {
+    if (!confirm('সব পরিবর্তন মুছে ডিফল্টে ফিরে যাবেন?')) return;
+    cardState = defaultState();
+    saveState();
+    setColumns('auto');
+    document.getElementById('colSelect').value = 'auto';
+    try { localStorage.removeItem('dashboard_cols'); } catch(e){}
+    renderGrid();
+}
+
+// Click outside panel to close
+document.getElementById('customizePanel').addEventListener('click', function(e) {
+    if (e.target === this) closeCustomize();
+});
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', function() {
+    loadColumns();
+    renderGrid();
+});
+</script>
 
 <div class="grid-2 mb-24">
     <!-- সাম্প্রতিক ভর্তি -->
