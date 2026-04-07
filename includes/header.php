@@ -394,20 +394,9 @@ if (isset($parentLayout) && $parentLayout) {
 
         <!-- আইডি কার্ড -->
         <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-        <div class="nav-group">
-            <div class="nav-group-header" onclick="toggleGroup('idcard')">
-                <span><i class="fas fa-id-card"></i> আইডি কার্ড</span>
-                <i class="fas fa-chevron-down nav-arrow" id="arrow-idcard"></i>
-            </div>
-            <div class="nav-group-items" id="group-idcard">
-                <a href="<?= BASE_URL ?>/modules/idcard/id_card.php?type=student" class="nav-item nav-sub">
-                    <i class="fas fa-user-graduate"></i> ছাত্র আইডি কার্ড
-                </a>
-                <a href="<?= BASE_URL ?>/modules/idcard/id_card.php?type=teacher" class="nav-item nav-sub">
-                    <i class="fas fa-chalkboard-teacher"></i> শিক্ষক আইডি কার্ড
-                </a>
-            </div>
-        </div>
+        <a href="<?= BASE_URL ?>/modules/idcard/id_card.php" class="nav-item <?= strpos($_SERVER['PHP_SELF'],'idcard')!==false?'active':'' ?>">
+            <i class="fas fa-id-card"></i> আইডি কার্ড জেনারেট
+        </a>
         <?php endif; ?>
 
         <!-- একাডেমিক -->
