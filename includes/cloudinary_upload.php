@@ -14,7 +14,7 @@ define('CLOUDINARY_API_SECRET', 'PHYeQcF8ryKHLfTB4sM8o_SaRmU');
  * @param string $publicId  যেমন: students/ANT-2026-NP4X
  * @return string|false
  */
-function uploadToCloudinary(string $tmpPath, string $publicId): string|false {
+function uploadToCloudinary($tmpPath, $publicId) {
     $timestamp = time();
     // Passport size crop: 200x257
     $params = [
