@@ -16,15 +16,6 @@ $sections->execute([$student['class_id']]); $currentSections = $sections->fetchA
 
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
-    $fields = ['name_bn','name','date_of_birth','gender','religion','blood_group','class_id','section_id',
-               'father_name','father_phone','mother_name','guardian_phone','address_present',
-               'status','hifz_para_complete','notes',
-               'monthly_fee','is_hostel','hostel_fee','is_hostel_food','food_fee'];
-    $sets=[]; $vals=[];
-    foreach ($fields as $f) {
-        $sets[] = "$f=?";
-        $vals[] = trim($_POST[$f]??'') ?: null;
-    }
 
     // হোস্টেল চেকবক্স — না থাকলে 0
     $isHostel     = isset($_POST['is_hostel']) ? 1 : 0;
@@ -33,10 +24,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $foodFee      = $isHostelFood ? (float)($_POST['food_fee'] ?? 0) : 0;
 
     $sets=[]; $vals=[];
-    $simpleFields = ['name_bn','name','date_of_birth','gender','religion','blood_group','class_id','section_id',
-                     'roll_number',
-                     'father_name','father_phone','mother_name','guardian_phone','address_present',
-                     'status','hifz_para_complete','notes'];
+    $simpleFields = [
+        'name_bn','name','date_of_birth','gender','religion','blood_group',
+        'class_id','section_id','roll_number',
+        'father_name','father_phone','mother_name','guardian_phone',
+        'address_present','status','hifz_para_complete','notes'
+    ];
     foreach ($simpleFields as $f) {
         $sets[] = "$f=?";
         $vals[] = trim($_POST[$f]??'') ?: null;
@@ -47,49 +40,87 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets[] = 'hostel_fee=?';     $vals[] = $hostelFee;
     $sets[] = 'is_hostel_food=?'; $vals[] = $isHostelFood;
     $sets[] = 'food_fee=?';       $vals[] = $foodFee;
-    // Photo upload — Cloudinary
+
+    // ===== Photo Upload =====
     $photoCroppedB64 = trim($_POST['photo_cropped'] ?? '');
+
     if ($photoCroppedB64 && strpos($photoCroppedB64, 'data:image/') === 0) {
+        // Browser থেকে cropped base64 image
         $b64Data  = preg_replace('/^data:image\/\w+;base64,/', '', $photoCroppedB64);
         $imgBytes = base64_decode($b64Data);
-        if ($imgBytes !== false && strlen($imgBytes) > 0) {
-            $tmpPath = tempnam(sys_get_temp_dir(), 'photo_');
-            file_put_contents($tmpPath, $imgBytes);
-            require_once '../../includes/cloudinary_upload.php';
-            $cloudUrl = uploadToCloudinary($tmpPath, 'students/' . $student['student_id']);
-            unlink($tmpPath);
-            if ($cloudUrl) {
-                $sets[] = 'photo=?'; $vals[] = $cloudUrl;
+
+        if ($imgBytes !== false && strlen($imgBytes) > 100) {
+            $tmpPath = tempnam(sys_get_temp_dir(), 'photo_') . '.jpg';
+            if (file_put_contents($tmpPath, $imgBytes) !== false) {
+                require_once '../../includes/cloudinary_upload.php';
+                $cloudUrl = uploadToCloudinary($tmpPath, 'students/' . $student['student_id']);
+                @unlink($tmpPath);
+                if ($cloudUrl) {
+                    $sets[] = 'photo=?';
+                    $vals[] = $cloudUrl;
+                } else {
+                    setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। Cloudinary credentials চেক করুন অথবা আবার চেষ্টা করুন।');
+                    header("Location: edit.php?id=$id");
+                    exit;
+                }
             } else {
-                setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
-                header("Location: edit.php?id=$id"); exit;
+                error_log('[Edit] Failed to write temp file: ' . $tmpPath);
+                setFlash('danger', 'ছবি প্রক্রিয়া করতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+                header("Location: edit.php?id=$id");
+                exit;
             }
         }
-    } elseif (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === 0) {
+
+    } elseif (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
+        // সরাসরি file upload
         $allowedTypes = ['image/jpeg','image/jpg','image/png','image/gif','image/webp'];
         $mimeType = mime_content_type($_FILES['photo']['tmp_name']);
         if (!in_array($mimeType, $allowedTypes)) {
             setFlash('danger', 'শুধু JPG, PNG, GIF বা WebP ছবি upload করুন।');
-            header("Location: edit.php?id=$id"); exit;
+            header("Location: edit.php?id=$id");
+            exit;
         }
         if ($_FILES['photo']['size'] > 5 * 1024 * 1024) {
             setFlash('danger', 'ছবির সাইজ ৫MB এর বেশি হবে না।');
-            header("Location: edit.php?id=$id"); exit;
+            header("Location: edit.php?id=$id");
+            exit;
         }
         require_once '../../includes/cloudinary_upload.php';
         $cloudUrl = uploadToCloudinary($_FILES['photo']['tmp_name'], 'students/' . $student['student_id']);
         if ($cloudUrl) {
-            $sets[] = 'photo=?'; $vals[] = $cloudUrl;
+            $sets[] = 'photo=?';
+            $vals[] = $cloudUrl;
         } else {
-            setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
-            header("Location: edit.php?id=$id"); exit;
+            setFlash('danger', 'ছবি upload ব্যর্থ হয়েছে। Cloudinary credentials চেক করুন অথবা আবার চেষ্টা করুন।');
+            header("Location: edit.php?id=$id");
+            exit;
         }
+
+    } elseif (!empty($_FILES['photo']['error']) && $_FILES['photo']['error'] !== UPLOAD_ERR_NO_FILE) {
+        // PHP upload error
+        $uploadErrors = [
+            UPLOAD_ERR_INI_SIZE   => 'ছবি php.ini upload_max_filesize সীমার বেশি।',
+            UPLOAD_ERR_FORM_SIZE  => 'ছবি form MAX_FILE_SIZE সীমার বেশি।',
+            UPLOAD_ERR_PARTIAL    => 'ছবি আংশিকভাবে upload হয়েছে।',
+            UPLOAD_ERR_NO_TMP_DIR => 'Temporary folder পাওয়া যাচ্ছে না।',
+            UPLOAD_ERR_CANT_WRITE => 'Disk এ লেখা সম্ভব হচ্ছে না।',
+            UPLOAD_ERR_EXTENSION  => 'PHP extension ছবি upload বন্ধ করেছে।',
+        ];
+        $errCode = $_FILES['photo']['error'];
+        $errMsg  = $uploadErrors[$errCode] ?? "অজানা upload error (code: $errCode)";
+        setFlash('danger', $errMsg);
+        header("Location: edit.php?id=$id");
+        exit;
     }
+    // ছবি না দিলে — পুরনো ছবি ঠিকই থাকবে (photo field update হবে না)
 
     $vals[] = $id;
     $db->prepare("UPDATE students SET ".implode(',',$sets)." WHERE id=?")->execute($vals);
+
+    logActivity($_SESSION['user_id'], 'student_edit', 'students', "ছাত্র তথ্য আপডেট: ID $id");
     setFlash('success','তথ্য আপডেট হয়েছে।');
-    header("Location: view.php?id=$id"); exit;
+    header("Location: view.php?id=$id");
+    exit;
 }
 require_once '../../includes/header.php';
 ?>
@@ -100,6 +131,7 @@ require_once '../../includes/header.php';
 <form method="POST" enctype="multipart/form-data">
 <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
 <input type="hidden" name="update_student" value="1">
+
 <div class="card mb-16">
     <div class="card-header"><span class="card-title">ব্যক্তিগত তথ্য</span></div>
     <div class="card-body">
@@ -141,7 +173,7 @@ require_once '../../includes/header.php';
                     <?php endforeach; ?>
                 </select></div>
             <div class="form-group"><label>রোল নম্বর</label>
-                <input type="number" name="roll_number" class="form-control" min="1" value="<?=e($student['roll_number']??'')?>"></div>
+                <input type="number" name="roll_number" class="form-control" min="1" value="<?=e($student['roll_number']?? '')?>"></div>
             <div class="form-group"><label>অবস্থা</label>
                 <select name="status" class="form-control">
                     <?php foreach(['active'=>'সক্রিয়','inactive'=>'নিষ্ক্রিয়','passed'=>'উত্তীর্ণ','transferred'=>'বদলি'] as $v=>$l): ?>
@@ -153,6 +185,8 @@ require_once '../../includes/header.php';
         </div>
         <div class="form-group mt-16"><label>ঠিকানা</label>
             <textarea name="address_present" class="form-control" rows="2"><?=e($student['address_present']??'')?></textarea></div>
+
+        <!-- ছবি আপলোড সেকশন -->
         <div class="form-group mt-16"><label>ছবি (পাসপোর্ট সাইজ)</label>
 
             <input type="hidden" name="photo_cropped" id="photoCroppedData">
@@ -164,6 +198,7 @@ require_once '../../includes/header.php';
                 $curPhotoUrl = (strpos($curPhoto,'http') === 0) ? $curPhoto : BASE_URL.'/assets/uploads/'.e($curPhoto);
             }
             ?>
+
             <?php if ($curPhotoUrl): ?>
             <div id="photoPreviewWrap" style="margin-bottom:10px;text-align:left;">
                 <img id="photoPreviewImg" src="<?= $curPhotoUrl ?>" style="width:80px;height:103px;object-fit:cover;border:2px solid var(--primary);border-radius:6px;">
@@ -174,7 +209,14 @@ require_once '../../includes/header.php';
                 </div>
             </div>
             <div id="photoUploadArea" style="display:none;border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;background:var(--bg);"
-                 onclick="document.getElementById('photoFileInput').click()">
+                 onclick="document.getElementById('photoFileInput').click()"
+                 ondragover="event.preventDefault();this.style.borderColor='var(--primary)'"
+                 ondragleave="this.style.borderColor='var(--border)'"
+                 ondrop="handlePhotoDrop(event)">
+                <i class="fas fa-camera" style="font-size:28px;color:var(--primary-light);margin-bottom:8px;display:block;"></i>
+                <div style="font-size:13px;font-weight:600;">নতুন ছবি আপলোড করুন</div>
+                <div style="font-size:11px;color:var(--text-muted);">JPG / PNG / WebP • সর্বোচ্চ ৫MB</div>
+            </div>
             <?php else: ?>
             <div id="photoPreviewWrap" style="display:none;margin-bottom:10px;">
                 <img id="photoPreviewImg" style="width:80px;height:103px;object-fit:cover;border:2px solid var(--primary);border-radius:6px;">
@@ -192,12 +234,15 @@ require_once '../../includes/header.php';
                 <i class="fas fa-camera" style="font-size:28px;color:var(--primary-light);margin-bottom:8px;display:block;"></i>
                 <div style="font-size:13px;font-weight:600;">ছবি আপলোড করুন</div>
                 <div style="font-size:11px;color:var(--text-muted);">JPG / PNG / WebP • সর্বোচ্চ ৫MB</div>
-            <?php endif; ?>
             </div>
+            <?php endif; ?>
+
             <input type="file" id="photoFileInput" accept="image/*" style="display:none" onchange="openPhotoEditor(this)">
         </div>
+    </div>
+</div>
 
-<!-- ===== Photo Editor Modal ===== -->
+<!-- Photo Editor Modal -->
 <div id="photoEditorModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.7);align-items:center;justify-content:center;">
     <div style="background:#fff;border-radius:16px;width:min(96vw,780px);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4);">
         <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
@@ -364,35 +409,35 @@ function setPhotoResult(dataUrl){
 }
 function closePhotoEditor(){document.getElementById('photoEditorModal').style.display='none';}
 </script>
-    </div>
-</div>
+
 <div class="card mb-16">
     <div class="card-header"><span class="card-title">অভিভাবকের তথ্য</span></div>
     <div class="card-body">
         <div class="form-grid">
             <div class="form-group"><label>পিতার নাম</label>
-                <input type="text" name="father_name" class="form-control" value="<?=e($student['father_name']??'')?>"></div>
+                <input type="text" name="father_name" class="form-control" value="<?=e($student['father_name']?? '')?>"></div>
             <div class="form-group"><label>পিতার ফোন</label>
-                <input type="tel" name="father_phone" class="form-control" value="<?=e($student['father_phone']??'')?>"></div>
+                <input type="tel" name="father_phone" class="form-control" value="<?=e($student['father_phone']?? '')?>"></div>
             <div class="form-group"><label>মাতার নাম</label>
-                <input type="text" name="mother_name" class="form-control" value="<?=e($student['mother_name']??'')?>"></div>
+                <input type="text" name="mother_name" class="form-control" value="<?=e($student['mother_name']?? '')?>"></div>
             <div class="form-group"><label>অভিভাবকের ফোন</label>
-                <input type="tel" name="guardian_phone" class="form-control" value="<?=e($student['guardian_phone']??'')?>"></div>
+                <input type="tel" name="guardian_phone" class="form-control" value="<?=e($student['guardian_phone']?? '')?>"></div>
         </div>
     </div>
 </div>
+
 <div class="card mb-16">
     <div class="card-header"><span class="card-title">অতিরিক্ত নোট</span></div>
     <div class="card-body">
         <textarea name="notes" class="form-control" rows="3"><?=e($student['notes']??'')?></textarea>
     </div>
 </div>
+
 <div class="card mb-16">
     <div class="card-header" style="background:#f4ecf7;">
         <span class="card-title" style="color:#7d3c98;"><i class="fas fa-building"></i> হোস্টেল তথ্য</span>
     </div>
     <div class="card-body">
-        <!-- হোস্টেল -->
         <div>
             <label style="display:flex;align-items:center;gap:10px;font-weight:600;cursor:pointer;">
                 <input type="checkbox" name="is_hostel" id="isHostelCheck" onchange="toggleHostel(this)"
@@ -400,7 +445,6 @@ function closePhotoEditor(){document.getElementById('photoEditorModal').style.di
                 হোস্টেলে থাকে
             </label>
         </div>
-
         <div id="hostelFields" style="display:<?=!empty($student['is_hostel'])&&$student['is_hostel']?'block':'none'?>;margin-top:16px;padding:16px;background:#faf4ff;border-radius:10px;border:1px dashed #c39bd3;">
             <div class="form-grid">
                 <div class="form-group">
@@ -426,8 +470,6 @@ function closePhotoEditor(){document.getElementById('photoEditorModal').style.di
                 </div>
             </div>
         </div>
-
-        <!-- ফী নির্ধারণ লিংক -->
         <div style="margin-top:16px;padding:12px 16px;background:#fff8f0;border-radius:8px;border-left:4px solid #e67e22;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
             <div>
                 <div style="font-weight:600;font-size:14px;color:#e67e22;"><i class="fas fa-tags"></i> ব্যক্তিগত ফী নির্ধারণ</div>
@@ -445,6 +487,7 @@ function closePhotoEditor(){document.getElementById('photoEditorModal').style.di
     <a href="view.php?id=<?=$id?>" class="btn btn-outline">বাতিল</a>
 </div>
 </form>
+
 <script>
 function toggleHostel(cb) {
     document.getElementById('hostelFields').style.display = cb.checked ? 'block' : 'none';
@@ -455,12 +498,10 @@ function toggleHostel(cb) {
         document.getElementById('foodFee').value = 0;
     }
 }
-
 function toggleFood(cb) {
     document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
     if (!cb.checked) document.getElementById('foodFee').value = 0;
 }
-
 function loadSections(classId) {
     fetch('<?=BASE_URL?>/api/sections.php?class_id='+classId)
     .then(r=>r.json()).then(data=>{
