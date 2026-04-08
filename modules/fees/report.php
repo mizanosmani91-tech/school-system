@@ -24,17 +24,17 @@ $monthlySummary = $db->prepare("SELECT
     FROM fee_collections fc
     $divJoin
     WHERE YEAR(fc.payment_date)=? $divWhere
-    GROUP BY month_year ORDER BY month_year");
+    GROUP BY DATE_FORMAT(fc.payment_date,'%Y-%m') ORDER BY DATE_FORMAT(fc.payment_date,'%Y-%m')");
 $monthlySummary->execute([$year]);
 $monthly = $monthlySummary->fetchAll();
 
 // Fee type breakdown
-$byType = $db->prepare("SELECT ft.fee_name_bn, COUNT(*) as cnt, SUM(fc.paid_amount) as total
+$byType = $db->prepare("SELECT ft.fee_name_bn, ft.id as ft_id, COUNT(*) as cnt, SUM(fc.paid_amount) as total
     FROM fee_collections fc
     JOIN fee_types ft ON fc.fee_type_id=ft.id
     $divJoin
     WHERE YEAR(fc.payment_date)=? $divWhere
-    GROUP BY ft.id ORDER BY total DESC");
+    GROUP BY ft.id, ft.fee_name_bn ORDER BY SUM(fc.paid_amount) DESC");
 $byType->execute([$year]);
 $byTypeData = $byType->fetchAll();
 
@@ -49,7 +49,7 @@ $annualAmt = $annualTotal->fetchColumn();
 $byMethod = $db->prepare("SELECT fc.payment_method, SUM(fc.paid_amount) as total, COUNT(*) as cnt
     FROM fee_collections fc $divJoin
     WHERE YEAR(fc.payment_date)=? $divWhere
-    GROUP BY fc.payment_method ORDER BY total DESC");
+    GROUP BY fc.payment_method ORDER BY SUM(fc.paid_amount) DESC");
 $byMethod->execute([$year]);
 $methodData = $byMethod->fetchAll();
 
@@ -59,7 +59,7 @@ $byDivision = $db->prepare("SELECT d.division_name_bn, COUNT(*) as cnt, SUM(fc.p
     LEFT JOIN students s2 ON fc.student_id=s2.id
     LEFT JOIN divisions d ON s2.division_id=d.id
     WHERE YEAR(fc.payment_date)=?
-    GROUP BY d.id ORDER BY total DESC");
+    GROUP BY d.id, d.division_name_bn ORDER BY SUM(fc.paid_amount) DESC");
 $byDivision->execute([$year]);
 $divisionData = $byDivision->fetchAll();
 
