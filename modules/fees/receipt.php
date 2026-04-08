@@ -3,14 +3,14 @@ require_once '../../includes/functions.php';
 requireLogin();
 $db = getDB();
 $id   = (int)($_GET['id'] ?? 0);
-$stmt = $db->prepare("SELECT fc.*, ft.fee_name_bn, s.name_bn as sname, s.name as sname_en,
-    s.student_id as sid, s.father_name, c.class_name_bn, d.division_name_bn
-    FROM fee_collections fc
-    JOIN fee_types ft ON fc.fee_type_id=ft.id
-    JOIN students s ON fc.student_id=s.id
+$stmt = $db->prepare("SELECT fp.*, ft.name_bn as fee_type_name, s.name_bn as sname, s.name as sname_en,
+    s.student_id as sid, s.father_name, c.name_bn as class_name, d.name_bn as division_name
+    FROM fee_payments fp
+    JOIN fee_types ft ON fp.fee_type_id=ft.id
+    JOIN students s ON fp.student_id=s.id
     LEFT JOIN classes c ON s.class_id=c.id
-    LEFT JOIN divisions d ON s.division_id=d.id
-    WHERE fc.id=?");
+    LEFT JOIN divisions d ON c.division_id=d.id
+    WHERE fp.id=?");
 $stmt->execute([$id]);
 $rec = $stmt->fetch();
 if (!$rec) { setFlash('danger', 'রসিদ পাওয়া যায়নি।'); header('Location: collection.php'); exit; }
@@ -40,14 +40,14 @@ require_once '../../includes/header.php';
         <!-- Receipt Info -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:14px;margin-bottom:16px;">
             <?php $info = [
-                'রসিদ নম্বর'  => $rec['receipt_number'],
+                'রসিদ নম্বর'  => $rec['receipt_number'] ?? $rec['id'],
                 'তারিখ'       => banglaDate($rec['payment_date']),
                 'ছাত্রের নাম' => $rec['sname'] ?? $rec['sname_en'],
                 'ছাত্র ID'    => $rec['sid'],
-                'বিভাগ'       => $rec['division_name_bn'] ?? '',
-                'শ্রেণী'      => $rec['class_name_bn'] ?? '',
+                'বিভাগ'       => $rec['division_name'] ?? '',
+                'শ্রেণী'      => $rec['class_name'] ?? '',
                 'পিতার নাম'  => $rec['father_name'] ?? '',
-                'ফির ধরন'    => $rec['fee_name_bn'],
+                'ফির ধরন'    => $rec['fee_type_name'],
                 'মাস'         => $rec['month_year'] ?? '-',
             ];
             foreach ($info as $k => $v): if (!$v) continue; ?>
@@ -63,24 +63,24 @@ require_once '../../includes/header.php';
             <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;">
                 <span>মূল পরিমাণ</span><span>৳<?= number_format($rec['amount']) ?></span>
             </div>
-            <?php if ($rec['discount'] > 0): ?>
+            <?php if (($rec['discount'] ?? 0) > 0): ?>
             <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:var(--success);">
                 <span>ছাড়</span><span>-৳<?= number_format($rec['discount']) ?></span>
             </div>
-            <?php endif; if ($rec['fine'] > 0): ?>
+            <?php endif; if (($rec['fine'] ?? 0) > 0): ?>
             <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;color:var(--danger);">
                 <span>জরিমানা</span><span>+৳<?= number_format($rec['fine']) ?></span>
             </div>
             <?php endif; ?>
             <div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:18px;font-weight:700;border-top:1px solid var(--border);margin-top:8px;">
                 <span>মোট পরিশোধ</span>
-                <span style="color:var(--success);">৳<?= number_format($rec['paid_amount']) ?></span>
+                <span style="color:var(--success);">৳<?= number_format($rec['total_amount'] ?? $rec['amount']) ?></span>
             </div>
         </div>
 
         <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text-muted);">
-            <span>পরিশোধ পদ্ধতি: <strong style="color:var(--text);"><?= e($rec['payment_method']) ?></strong></span>
-            <?php if ($rec['transaction_id']): ?>
+            <span>পরিশোধ পদ্ধতি: <strong style="color:var(--text);"><?= e($rec['payment_method'] ?? 'নগদ') ?></strong></span>
+            <?php if (!empty($rec['transaction_id'])): ?>
             <span>TXN: <?= e($rec['transaction_id']) ?></span>
             <?php endif; ?>
         </div>
