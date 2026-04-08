@@ -201,7 +201,7 @@ function callAI($message, $systemPrompt = '', $history = []) {
     ];
 
     // Gemini 1.5 Flash — সম্পূর্ণ বিনামূল্যে (daily 1500 requests)
-    $model = 'gemini-1.5-flash';
+    $model = 'gemini-2.0-flash';
     $url   = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
     $ch = curl_init($url);
