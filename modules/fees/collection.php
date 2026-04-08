@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['collect_fee'])) {
 // Search student
 $studentResult = null;
 $studentFees = [];
-$customFeeMap = []; // student-specific fee amounts
+$customFeeMap = [];
 if (isset($_GET['student_id'])) {
     $sid = (int)$_GET['student_id'];
     $stmt = $db->prepare("SELECT s.*, c.class_name_bn FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.id=?");
@@ -113,7 +113,7 @@ require_once '../../includes/header.php';
             <div style="flex:2;min-width:200px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">নাম বা ID দিয়ে খুঁজুন</label>
                 <div style="display:flex;gap:8px;">
-                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর..." oninput="liveSearch(this.value)">
+                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর...">
                     <button type="button" class="btn btn-primary" onclick="searchStudent()"><i class="fas fa-search"></i></button>
                 </div>
             </div>
@@ -260,7 +260,6 @@ require_once '../../includes/header.php';
 
 <script>
 function onDivisionChange(divId) {
-    // URL reload করে division_id সহ
     const url = new URL(window.location.href);
     url.searchParams.set('division_id', divId);
     url.searchParams.delete('student_id');
@@ -278,17 +277,13 @@ function loadStudentsByClass(classId) {
         .then(data => showDropdown(data));
 }
 
-function liveSearch(q) {
-    if (q.length < 2) { document.getElementById('searchDropdown').style.display = 'none'; return; }
-    const classId = document.getElementById('classFilter').value;
-    const url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q) + (classId ? '&class_id=' + classId : '');
-    fetch(url).then(r => r.json()).then(data => showDropdown(data));
-}
-
 function searchStudent() {
     const q = document.getElementById('studentSearch').value;
     const classId = document.getElementById('classFilter').value;
-    const url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q) + (classId ? '&class_id=' + classId : '');
+    const divId = document.getElementById('divisionFilter').value;
+    let url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q);
+    if (classId) url += '&class_id=' + classId;
+    if (divId) url += '&division_id=' + divId;
     fetch(url).then(r => r.json()).then(data => showDropdown(data));
 }
 
@@ -299,7 +294,7 @@ function showDropdown(data) {
         dd.style.display = 'block'; return;
     }
     dd.innerHTML = data.map(s =>
-        `<div onclick="selectStudent(${s.id},'${(s.name_bn||s.name).replace(/'/g,"\'")}')"
+        `<div onclick="selectStudent(${s.id},'${(s.name_bn||s.name).replace(/'/g,"\\'")}')"
             style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f0f4f8;font-size:13px;display:flex;align-items:center;gap:10px;"
             onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background='#fff'">
             <div style="width:32px;height:32px;background:#1a5276;color:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">
@@ -307,7 +302,7 @@ function showDropdown(data) {
             </div>
             <div>
                 <div style="font-weight:600;">${s.name_bn||s.name}</div>
-                <div style="font-size:11px;color:#718096;">${s.student_id} &bull; ${s.class_name_bn||''} &bull; রোল: ${s.roll_number||''}</div>
+                <div style="font-size:11px;color:#718096;">${s.student_id} &bull; ${s.division_name_bn||''} → ${s.class_name_bn||''} &bull; রোল: ${s.roll_number||''}</div>
             </div>
         </div>`
     ).join('');
@@ -317,7 +312,9 @@ function showDropdown(data) {
 function selectStudent(id, name) {
     document.getElementById('studentSearch').value = name;
     document.getElementById('searchDropdown').style.display = 'none';
-    window.location.href = 'collection.php?student_id=' + id;
+    const url = new URL(window.location.href);
+    url.searchParams.set('student_id', id);
+    window.location.href = url.toString();
 }
 
 // Close dropdown on outside click
@@ -327,13 +324,21 @@ document.addEventListener('click', function(e) {
     }
 });
 
+// Live search with debounce
+let searchTimeout;
+document.getElementById('studentSearch').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const q = this.value;
+    if (q.length < 2) { document.getElementById('searchDropdown').style.display = 'none'; return; }
+    searchTimeout = setTimeout(() => searchStudent(), 300);
+});
+
 function setAmount(sel) {
     const opt = sel.selectedOptions[0];
     const amount = opt.dataset.amount || '';
     const defaultAmt = opt.dataset.default || '';
     const isCustom = opt.dataset.custom === '1';
     document.getElementById('feeAmount').value = amount;
-    // Show hint if custom
     let hint = document.getElementById('feeAmountHint');
     if (!hint) {
         hint = document.createElement('small');
@@ -343,7 +348,7 @@ function setAmount(sel) {
     }
     if (isCustom) {
         hint.style.color = '#e67e22';
-        hint.innerHTML = `<i class="fas fa-tag"></i> ব্যক্তিগত নির্ধারিত: ৳${parseFloat(amount).toLocaleString()} (ডিফল্ট: ৳${parseFloat(defaultAmt).toLocaleString()})`;
+        hint.innerHTML = '<i class="fas fa-tag"></i> ব্যক্তিগত নির্ধারিত: ৳' + parseFloat(amount).toLocaleString() + ' (ডিফল্ট: ৳' + parseFloat(defaultAmt).toLocaleString() + ')';
     } else {
         hint.innerHTML = '';
     }
@@ -359,35 +364,6 @@ function calcTotal() {
 
 function toggleTxn(sel) {
     document.getElementById('txnGroup').style.display = sel.value !== 'cash' ? 'block' : 'none';
-}
-
-// Auto-complete search
-let searchTimeout;
-document.getElementById('studentSearch').addEventListener('input', function() {
-    clearTimeout(searchTimeout);
-    const q = this.value;
-    if (q.length < 2) { document.getElementById('searchDropdown').style.display = 'none'; return; }
-    searchTimeout = setTimeout(() => {
-        fetch('<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q))
-            .then(r => r.json())
-            .then(data => {
-                const dd = document.getElementById('searchDropdown');
-                if (!data.length) { dd.style.display = 'none'; return; }
-                dd.innerHTML = data.map(s =>
-                    `<div onclick="selectStudent(${s.id},'${s.name_bn||s.name}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;">
-                        <strong>${s.name_bn||s.name}</strong> &mdash; ${s.student_id} &mdash; ${s.class_name_bn||''}
-                    </div>`
-                ).join('');
-                dd.style.display = 'block';
-            });
-    }, 300);
-});
-
-function selectStudent(id, name) {
-    document.getElementById('selectedStudentId').value = id;
-    document.getElementById('studentSearch').value = name;
-    document.getElementById('searchDropdown').style.display = 'none';
-    window.location.href = 'collection.php?student_id=' + id;
 }
 
 document.getElementById('feeAmount').addEventListener('input', calcTotal);
