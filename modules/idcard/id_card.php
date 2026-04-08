@@ -391,7 +391,7 @@ require_once '../../includes/header.php';
                     if($idc['logo']): ?>
                     <img src="<?= $idc['logo'] ?>" class="front-logo" style="<?= $logoStyle ?>object-fit:contain;flex-shrink:0;" alt="logo">
                     <?php elseif($logoPath): ?>
-                    <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" style="<?= $logoStyle ?>object-fit:contain;flex-shrink:0;" alt="logo">
+                    <img src="<?= str_starts_with($logoPath,'http') ? e($logoPath) : BASE_URL.'/assets/uploads/'.e($logoPath) ?>" class="front-logo" style="<?= $logoStyle ?>object-fit:contain;flex-shrink:0;" alt="logo">
                     <?php else: ?>
                     <div class="front-logo-placeholder" style="<?= $logoStyle ?>background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-mosque" style="color:#fff;font-size:<?= round($logoSz*0.4) ?>px;"></i></div>
                     <?php endif; ?>
