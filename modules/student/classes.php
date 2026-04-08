@@ -66,8 +66,14 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='add_section
 // ===== শাখা মুছুন =====
 if (isset($_GET['delete_section'])) {
     $id = (int)$_GET['delete_section'];
-    $db->prepare("DELETE FROM sections WHERE id=?")->execute([$id]);
-    $msg = 'শাখা মুছে ফেলা হয়েছে।';
+    $chk = $db->prepare("SELECT COUNT(*) FROM students WHERE section_id=? AND status='active'");
+    $chk->execute([$id]);
+    if ($chk->fetchColumn() > 0) {
+        $err = 'এই শাখায় সক্রিয় ছাত্র আছে। আগে ছাত্রদের অন্য শাখায় সরান।';
+    } else {
+        $db->prepare("DELETE FROM sections WHERE id=?")->execute([$id]);
+        $msg = 'শাখা মুছে ফেলা হয়েছে।';
+    }
 }
 
 // ===== Data load =====
