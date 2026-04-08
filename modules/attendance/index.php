@@ -4,18 +4,31 @@ requireLogin(['super_admin','principal','teacher']);
 $pageTitle = 'উপস্থিতি গ্রহণ';
 $db = getDB();
 
-$classId = (int)($_GET['class_id'] ?? 0);
-$date = $_GET['date'] ?? date('Y-m-d');
-$classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$divisionId = (int)($_GET['division_id'] ?? 0);
+$classId    = (int)($_GET['class_id'] ?? 0);
+$date       = $_GET['date'] ?? date('Y-m-d');
 
-// Save attendance
+// সব বিভাগ
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+
+// শ্রেণী — বিভাগ অনুযায়ী
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
+
+// উপস্থিতি সংরক্ষণ
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_attendance'])) {
     if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF Error');
 
-    $postDate = $_POST['date'];
-    $postClassId = (int)$_POST['class_id'];
-    $statuses = $_POST['status'] ?? [];
-    $notes = $_POST['note'] ?? [];
+    $postDate      = $_POST['date'];
+    $postClassId   = (int)$_POST['class_id'];
+    $postDivisionId = (int)$_POST['division_id'];
+    $statuses      = $_POST['status'] ?? [];
+    $notes         = $_POST['note'] ?? [];
 
     $db->beginTransaction();
     try {
@@ -31,14 +44,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_attendance'])) {
         $db->rollBack();
         setFlash('danger', 'ত্রুটি: ' . $e->getMessage());
     }
-    header("Location: index.php?class_id=$postClassId&date=$postDate");
+    header("Location: index.php?division_id=$postDivisionId&class_id=$postClassId&date=$postDate");
     exit;
 }
 
-// Load students & existing attendance
-$students = [];
+// ছাত্র ও বিদ্যমান উপস্থিতি লোড
+$students           = [];
 $existingAttendance = [];
+$currentClass       = null;
+
 if ($classId) {
+    // শ্রেণীর তথ্য (বিভাগসহ)
+    $clsInfo = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.id=?");
+    $clsInfo->execute([$classId]);
+    $currentClass = $clsInfo->fetch();
+
     $stmt = $db->prepare("SELECT s.*, sec.section_name FROM students s
         LEFT JOIN sections sec ON s.section_id = sec.id
         WHERE s.class_id=? AND s.status='active' ORDER BY s.roll_number");
@@ -60,24 +80,61 @@ require_once '../../includes/header.php';
     <a href="report.php" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> রিপোর্ট</a>
 </div>
 
-<!-- Filter -->
+<!-- ===== বিভাগ Quick-Tab ===== -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <a href="index.php?date=<?= $date ?>"
+       class="btn btn-sm <?= !$divisionId ? 'btn-primary' : 'btn-outline' ?>">
+        <i class="fas fa-layer-group"></i> সব বিভাগ
+    </a>
+    <?php foreach ($divisions as $d): ?>
+    <a href="index.php?division_id=<?= $d['id'] ?>&date=<?= $date ?>"
+       class="btn btn-sm <?= $divisionId == $d['id'] ? 'btn-primary' : 'btn-outline' ?>">
+        <?= e($d['division_name_bn']) ?>
+    </a>
+    <?php endforeach; ?>
+</div>
+
+<!-- ===== Filter ===== -->
 <div class="card mb-16">
     <div class="card-body" style="padding:14px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="filterForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+
+            <input type="hidden" name="division_id" id="hiddenDivisionId" value="<?= $divisionId ?>">
+
+            <!-- বিভাগ -->
             <div class="form-group" style="flex:1;min-width:160px;margin:0;">
-                <label style="font-size:12px;">শ্রেণী</label>
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="onDivisionChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $divisionId == $d['id'] ? 'selected' : '' ?>>
+                        <?= e($d['division_name_bn']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- শ্রেণী -->
+            <div class="form-group" style="flex:1;min-width:160px;margin:0;">
+                <label style="font-size:12px;font-weight:600;">শ্রেণী <span style="color:red">*</span></label>
                 <select name="class_id" class="form-control" style="padding:7px;" required onchange="this.form.submit()">
                     <option value="">শ্রেণী নির্বাচন করুন</option>
                     <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['id'] ?>" <?= $classId == $c['id'] ? 'selected':'' ?>>
+                    <option value="<?= $c['id'] ?>"
+                        data-div="<?= $c['division_id'] ?>"
+                        <?= $classId == $c['id'] ? 'selected' : '' ?>>
+                        <?php if (!$divisionId): ?><?= e($c['division_name_bn']) ?> → <?php endif; ?>
                         <?= e($c['class_name_bn']) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- তারিখ -->
             <div class="form-group" style="flex:1;min-width:160px;margin:0;">
-                <label style="font-size:12px;">তারিখ</label>
-                <input type="date" name="date" class="form-control" style="padding:7px;" value="<?= $date ?>" max="<?= date('Y-m-d') ?>" onchange="this.form.submit()">
+                <label style="font-size:12px;font-weight:600;">তারিখ</label>
+                <input type="date" name="date" class="form-control" style="padding:7px;"
+                    value="<?= $date ?>" max="<?= date('Y-m-d') ?>" onchange="this.form.submit()">
             </div>
         </form>
     </div>
@@ -85,19 +142,25 @@ require_once '../../includes/header.php';
 
 <?php if ($classId && !empty($students)): ?>
 <form method="POST">
-    <input type="hidden" name="csrf" value="<?= getCsrfToken() ?>">
-    <input type="hidden" name="date" value="<?= $date ?>">
-    <input type="hidden" name="class_id" value="<?= $classId ?>">
+    <input type="hidden" name="csrf"        value="<?= getCsrfToken() ?>">
+    <input type="hidden" name="date"        value="<?= $date ?>">
+    <input type="hidden" name="class_id"    value="<?= $classId ?>">
+    <input type="hidden" name="division_id" value="<?= $divisionId ?>">
     <input type="hidden" name="save_attendance" value="1">
 
 <div class="card">
     <div class="card-header">
         <span class="card-title">
-            <?= banglaDate($date) ?> তারিখের উপস্থিতি &mdash; মোট <?= toBanglaNumber(count($students)) ?> জন
+            <?php if ($currentClass): ?>
+            <span style="font-size:12px;color:var(--primary);font-weight:700;margin-right:6px;">
+                <?= e($currentClass['division_name_bn']) ?>
+            </span>
+            <?php endif; ?>
+            <?= banglaDate($date) ?> &mdash; মোট <?= toBanglaNumber(count($students)) ?> জন
         </span>
         <div style="display:flex;gap:8px;">
             <button type="button" class="btn btn-success btn-sm" onclick="markAll('present')">সবাই উপস্থিত</button>
-            <button type="button" class="btn btn-danger btn-sm" onclick="markAll('absent')">সবাই অনুপস্থিত</button>
+            <button type="button" class="btn btn-danger btn-sm"  onclick="markAll('absent')">সবাই অনুপস্থিত</button>
         </div>
     </div>
 
@@ -133,9 +196,13 @@ require_once '../../includes/header.php';
                     <td>
                         <div style="display:flex;gap:6px;" class="att-btns">
                             <?php
-                            $statOptions = ['present'=>['✓ উপস্থিত','success'], 'absent'=>['✗ অনুপস্থিত','danger'], 'late'=>['⏰ দেরি','warning'], 'excused'=>['ছুটি','info']];
+                            $statOptions = [
+                                'present' => ['✓ উপস্থিত', 'success'],
+                                'absent'  => ['✗ অনুপস্থিত', 'danger'],
+                                'late'    => ['⏰ দেরি', 'warning'],
+                                'excused' => ['ছুটি', 'info'],
+                            ];
                             foreach ($statOptions as $v => [$label, $color]):
-                                $sel = $att['status'] === $v ? '' : 'outline-';
                             ?>
                             <label style="cursor:pointer;">
                                 <input type="radio" name="status[<?= $s['id'] ?>]" value="<?= $v ?>"
@@ -168,14 +235,26 @@ require_once '../../includes/header.php';
 
 <?php elseif ($classId && empty($students)): ?>
 <div class="alert alert-warning"><i class="fas fa-info-circle"></i> এই শ্রেণীতে কোনো সক্রিয় ছাত্র নেই।</div>
-<?php elseif (!$classId): ?>
-<div class="card"><div class="card-body" style="text-align:center;padding:48px;color:var(--text-muted);">
-    <i class="fas fa-hand-point-up" style="font-size:48px;margin-bottom:16px;"></i>
-    <p style="font-size:16px;">উপরে শ্রেণী নির্বাচন করুন</p>
-</div></div>
+
+<?php else: ?>
+<div class="card">
+    <div class="card-body" style="text-align:center;padding:48px;color:var(--text-muted);">
+        <i class="fas fa-hand-point-up" style="font-size:48px;margin-bottom:16px;display:block;opacity:.3;"></i>
+        <p style="font-size:16px;">উপরে বিভাগ ও শ্রেণী নির্বাচন করুন</p>
+    </div>
+</div>
 <?php endif; ?>
 
 <script>
+// বিভাগ পরিবর্তন হলে class_id রিসেট করে submit
+function onDivisionChange(divId) {
+    document.getElementById('hiddenDivisionId').value = divId;
+    // class_id রিসেট
+    const classSel = document.querySelector('select[name="class_id"]');
+    if (classSel) classSel.value = '';
+    document.getElementById('filterForm').submit();
+}
+
 function markAll(status) {
     document.querySelectorAll(`input[type=radio][value=${status}]`).forEach(r => {
         r.checked = true;
@@ -187,32 +266,32 @@ function updateRow(id, status) {
     const row = document.getElementById('row' + id);
     const colors = { present: '#eafaf1', absent: '#fdedec', late: '#fef9e7', excused: '#d1ecf1' };
     row.style.background = colors[status] || '';
-    // Update button styles
     row.querySelectorAll('.att-opt').forEach(b => {
         b.style.background = 'transparent';
-        b.style.color = 'var(--text-muted)';
-        b.style.border = '1px solid var(--border)';
+        b.style.color      = 'var(--text-muted)';
+        b.style.border     = '1px solid var(--border)';
     });
     const radioInput = row.querySelector(`input[value="${status}"]`);
     if (radioInput) {
-        const btn = radioInput.nextElementSibling;
+        const btn    = radioInput.nextElementSibling;
         const bColors = { present: 'var(--success)', absent: 'var(--danger)', late: 'var(--warning)', excused: 'var(--info)' };
         btn.style.background = bColors[status];
-        btn.style.color = '#fff';
-        btn.style.border = 'none';
+        btn.style.color      = '#fff';
+        btn.style.border     = 'none';
     }
     updateCounts();
 }
 
 function updateCounts() {
     const counts = { present: 0, absent: 0, late: 0, excused: 0 };
-    document.querySelectorAll('input[type=radio]:checked').forEach(r => { counts[r.value] = (counts[r.value] || 0) + 1; });
+    document.querySelectorAll('input[type=radio]:checked').forEach(r => {
+        counts[r.value] = (counts[r.value] || 0) + 1;
+    });
     document.getElementById('cntPresent').textContent = counts.present || '০';
-    document.getElementById('cntAbsent').textContent = counts.absent || '০';
-    document.getElementById('cntLate').textContent = counts.late || '০';
+    document.getElementById('cntAbsent').textContent  = counts.absent  || '০';
+    document.getElementById('cntLate').textContent    = counts.late    || '০';
 }
 
-// Init
 document.querySelectorAll('input[type=radio]:checked').forEach(r => {
     updateRow(r.name.match(/\[(\d+)\]/)[1], r.value);
 });
