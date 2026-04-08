@@ -7,10 +7,10 @@ requireLogin();
 $pdo = getDB();
 
 // বিভাগ লোড
-$divisions = $pdo->query("SELECT * FROM divisions ORDER BY name_bn")->fetchAll();
+$divisions = $pdo->query("SELECT * FROM divisions ORDER BY sort_order, id")->fetchAll();
 
 // শ্রেণী লোড
-$classes = $pdo->query("SELECT c.*, d.name_bn as division_name FROM classes c LEFT JOIN divisions d ON c.division_id = d.id ORDER BY c.name_bn")->fetchAll();
+$classes = $pdo->query("SELECT c.*, d.division_name_bn as division_name FROM classes c LEFT JOIN divisions d ON c.division_id = d.id ORDER BY d.sort_order, c.class_numeric")->fetchAll();
 
 // URL থেকে student_id ও division_id নেওয়া
 $selected_division = isset($_GET['division_id']) ? intval($_GET['division_id']) : '';
