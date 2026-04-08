@@ -5,7 +5,11 @@ $pageTitle = 'নতুন ছাত্র ভর্তি';
 $db = getDB();
 
 // Classes
-$classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+$classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY c.division_id, c.class_numeric")->fetchAll();
+// Group classes by division
+$classesByDiv = [];
+foreach ($classes as $c) { $classesByDiv[$c['division_id']][] = $c; }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrf($_POST['csrf'] ?? '')) {
@@ -16,6 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $name = trim($_POST['name'] ?? '');
     $nameBn = trim($_POST['name_bn'] ?? '');
+    $divisionId = (int)($_POST['division_id'] ?? 0);
+    $divisionId = (int)($_POST['division_id'] ?? 0);
     $classId = (int)($_POST['class_id'] ?? 0);
     $sectionId = (int)($_POST['section_id'] ?? 0) ?: null;
     $dob = $_POST['dob'] ?? null;
@@ -138,15 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = $db->prepare("INSERT INTO students
             (student_id, roll_number, name, name_bn, date_of_birth, gender, religion, blood_group,
-             class_id, admission_class_id, section_id, academic_year, admission_year, admission_date,
+             division_id, class_id, admission_class_id, section_id, academic_year, admission_year, admission_date,
              father_name, father_name_en, father_phone,
              mother_name, mother_name_en, mother_phone, guardian_phone, address_present,
              previous_school, birth_certificate_no, photo, secret_code, status,
              monthly_fee, is_hostel, hostel_fee, is_hostel_food, food_fee, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
         $stmt->execute([
             $studentId, $rollNo, $name, $nameBn, $dob ?: null, $gender, $religion, $bloodGroup,
-            $classId, $classId, $sectionId, date('Y'), $admissionYear, $admDate,
+            $divisionId ?: null, $classId, $classId, $sectionId, date('Y'), $admissionYear, $admDate,
             $fatherName, $fatherNameEn, $fatherPhone,
             $motherName, $motherNameEn, $motherPhone, $guardianPhone, $address,
             $prevSchool, $birthCert, $photo, $secretCode, 'active',
@@ -456,11 +462,22 @@ function closePhotoEditor(){document.getElementById('photoEditorModal').style.di
     <div class="card-body">
         <div class="form-grid">
             <div class="form-group">
+                <label>বিভাগ <span>*</span></label>
+                <select name="division_id" class="form-control" required id="divisionSelect" onchange="filterByDivision(this.value)">
+                    <option value="">-- বিভাগ নির্বাচন করুন --</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?= $d['id'] ?>"><?= e($d['division_name_bn']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
                 <label>শ্রেণী <span>*</span></label>
                 <select name="class_id" class="form-control" required id="classSelect" onchange="loadSections(this.value)">
-                    <option value="">শ্রেণী নির্বাচন করুন</option>
+                    <option value="">আগে বিভাগ নির্বাচন করুন</option>
                     <?php foreach ($classes as $c): ?>
-                    <option value="<?= $c['id'] ?>"><?= e($c['class_name_bn'] ?? $c['class_name']) ?></option>
+                    <option value="<?= $c['id'] ?>" data-div="<?= $c['division_id'] ?>" style="display:none;">
+                        <?= e($c['class_name_bn'] ?? $c['class_name']) ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -573,6 +590,17 @@ function toggleHostel(cb) {
 function toggleFood(cb) {
     document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
     if (!cb.checked) document.getElementById('foodFee').value = '';
+}
+function filterByDivision(divId) {
+    const classSel = document.getElementById('classSelect');
+    const secSel = document.getElementById('sectionSelect');
+    classSel.value = '';
+    secSel.innerHTML = '<option value="">শ্রেণী নির্বাচন করুন আগে</option>';
+    Array.from(classSel.options).forEach(opt => {
+        if (!opt.value) { opt.style.display = ''; return; }
+        opt.style.display = (opt.dataset.div === divId) ? '' : 'none';
+    });
+    classSel.options[0].text = divId ? 'শ্রেণী নির্বাচন করুন' : 'আগে বিভাগ নির্বাচন করুন';
 }
 function loadSections(classId) {
     if (!classId) return;
