@@ -78,9 +78,9 @@ require_once '../../includes/header.php';
 <div class="card mb-16">
     <div class="card-header"><span class="card-title"><i class="fas fa-search"></i> ছাত্র খুঁজুন</span></div>
     <div class="card-body" style="padding:14px 20px;">
-        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
             <!-- Division filter -->
-            <div style="flex:1;min-width:150px;">
+            <div style="flex:0 0 140px;min-width:120px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">বিভাগ</label>
                 <select id="divisionFilter" class="form-control" style="padding:8px;" onchange="onDivisionChange(this.value)">
                     <option value="">সব বিভাগ</option>
@@ -92,7 +92,7 @@ require_once '../../includes/header.php';
                 </select>
             </div>
             <!-- Class filter -->
-            <div style="flex:1;min-width:160px;">
+            <div style="flex:0 0 150px;min-width:130px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">শ্রেণী দিয়ে ফিল্টার</label>
                 <select id="classFilter" class="form-control" style="padding:8px;" onchange="loadStudentsByClass(this.value)">
                     <option value="">সব শ্রেণী</option>
@@ -114,9 +114,9 @@ require_once '../../includes/header.php';
                 </select>
             </div>
             <!-- Student dropdown -->
-            <div style="flex:1.4;min-width:240px;">
+            <div style="flex:1;min-width:180px;max-width:280px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">ছাত্র নির্বাচন</label>
-                <select id="studentSelect" class="form-control" style="padding:8px;" onchange="selectStudentFromDropdown(this.value)">
+                <select id="studentSelect" class="form-control" style="padding:8px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" onchange="selectStudentFromDropdown(this.value)">
                     <?php if ($studentResult): ?>
                     <option value="<?= $studentResult['id'] ?>" selected>
                         <?= e($studentResult['name_bn'] ?? $studentResult['name']) ?> — <?= e($studentResult['student_id']) ?>
@@ -127,10 +127,10 @@ require_once '../../includes/header.php';
                 </select>
             </div>
             <!-- Name/ID search -->
-            <div style="flex:2;min-width:220px;">
+            <div style="flex:1;min-width:180px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">নাম বা ID দিয়ে খুঁজুন</label>
                 <div style="display:flex;gap:8px;">
-                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর..." value="<?= e($studentResult['name_bn'] ?? $studentResult['name'] ?? '') ?>">
+                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর...">
                     <button type="button" class="btn btn-primary" onclick="searchStudent()"><i class="fas fa-search"></i></button>
                 </div>
             </div>
@@ -305,7 +305,7 @@ function updateStudentSelect(data, selectedId) {
             s.class_name_bn || '',
             s.roll_number ? 'রোল: ' + s.roll_number : ''
         ].filter(Boolean).join(' • ');
-        opt.textContent = (s.name_bn || s.name || 'ছাত্র') + ' — ' + (s.student_id || '') + (meta ? ' (' + meta + ')' : '');
+        opt.textContent = (s.name_bn || s.name || 'ছাত্র') + ' — রোল: ' + (s.roll_number || '-');
         if (String(selectedId || '') === String(s.id)) {
             opt.selected = true;
         }
