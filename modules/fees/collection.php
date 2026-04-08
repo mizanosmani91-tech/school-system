@@ -4,7 +4,9 @@ requireLogin(['super_admin','principal','accountant']);
 $pageTitle = 'ফি সংগ্রহ';
 $db = getDB();
 
-$feeTypes = $db->query("SELECT * FROM fee_types WHERE is_active=1")->fetchAll();
+$feeTypes  = $db->query("SELECT * FROM fee_types WHERE is_active=1")->fetchAll();
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+$divisionId = (int)($_GET['division_id'] ?? 0);
 
 // Collect fee
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['collect_fee'])) {
@@ -73,16 +75,37 @@ require_once '../../includes/header.php';
     <div class="card-header"><span class="card-title"><i class="fas fa-search"></i> ছাত্র খুঁজুন</span></div>
     <div class="card-body" style="padding:14px 20px;">
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+            <!-- Division filter -->
+            <div style="flex:1;min-width:150px;">
+                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">বিভাগ</label>
+                <select id="divisionFilter" class="form-control" style="padding:8px;" onchange="onDivisionChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $divisionId == $d['id'] ? 'selected' : '' ?>>
+                        <?= e($d['division_name_bn']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <!-- Class filter -->
             <div style="flex:1;min-width:160px;">
                 <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">শ্রেণী দিয়ে ফিল্টার</label>
                 <select id="classFilter" class="form-control" style="padding:8px;" onchange="loadStudentsByClass(this.value)">
                     <option value="">সব শ্রেণী</option>
                     <?php
-                    $classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+                    if ($divisionId) {
+                        $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+                        $clsStmt->execute([$divisionId]);
+                        $classes = $clsStmt->fetchAll();
+                    } else {
+                        $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+                    }
                     foreach ($classes as $c):
                     ?>
-                    <option value="<?=$c['id']?>"><?=e($c['class_name_bn'])?></option>
+                    <option value="<?=$c['id']?>" data-div="<?=$c['division_id']?>">
+                        <?php if (!$divisionId): ?><?= e($c['division_name_bn'] ?? '') ?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -236,10 +259,21 @@ require_once '../../includes/header.php';
 </div>
 
 <script>
+function onDivisionChange(divId) {
+    // URL reload করে division_id সহ
+    const url = new URL(window.location.href);
+    url.searchParams.set('division_id', divId);
+    url.searchParams.delete('student_id');
+    window.location.href = url.toString();
+}
+
 function loadStudentsByClass(classId) {
     const dd = document.getElementById('searchDropdown');
     if (!classId) { dd.style.display = 'none'; return; }
-    fetch('<?= BASE_URL ?>/api/search_student.php?class_id=' + classId + '&q=')
+    const divId = document.getElementById('divisionFilter').value;
+    let url = '<?= BASE_URL ?>/api/search_student.php?class_id=' + classId + '&q=';
+    if (divId) url += '&division_id=' + divId;
+    fetch(url)
         .then(r => r.json())
         .then(data => showDropdown(data));
 }
