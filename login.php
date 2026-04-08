@@ -82,6 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $instituteName = getSetting('institute_name', APP_NAME);
+$dbOk = (getDB() !== null);
 ?>
 <!DOCTYPE html>
 <html lang="bn">
@@ -237,6 +238,15 @@ body {
             </div>
         </div>
 
+        <?php if (!$dbOk): ?>
+        <div class="error-box" style="background:#fff3cd;border-color:#ffc107;color:#856404;">
+            <i class="fas fa-database"></i>
+            <div>
+                <strong>ডাটাবেস সংযোগ সমস্যা!</strong><br>
+                <small>Railway Variables চেক করুন: MYSQLHOST, MYSQLDATABASE, MYSQLPASSWORD</small>
+            </div>
+        </div>
+        <?php endif; ?>
         <?php if ($error): ?>
         <div class="error-box"><i class="fas fa-exclamation-circle"></i> <?= e($error) ?></div>
         <?php endif; ?>
