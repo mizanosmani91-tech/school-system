@@ -10,7 +10,8 @@ $stmt = $db->prepare("SELECT * FROM students WHERE id=?");
 $stmt->execute([$id]); $student = $stmt->fetch();
 if (!$student) { setFlash('danger','পাওয়া যায়নি।'); header('Location: list.php'); exit; }
 
-$classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
 $sections = $db->prepare("SELECT * FROM sections WHERE class_id=?");
 $sections->execute([$student['class_id']]); $currentSections = $sections->fetchAll();
 
@@ -26,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['update_student'])) {
     $sets=[]; $vals=[];
     $simpleFields = [
         'name_bn','name','date_of_birth','gender','religion','blood_group',
-        'class_id','roll_number',
+        'division_id','class_id','roll_number',
         'father_name','father_phone','mother_name','guardian_phone',
         'address_present','status','hifz_para_complete','notes'
     ];
@@ -170,10 +171,23 @@ require_once '../../includes/header.php';
                     <option <?=$student['blood_group']===$bg?'selected':''?>><?=$bg?></option>
                     <?php endforeach; ?>
                 </select></div>
+            <div class="form-group"><label>বিভাগ</label>
+                <select name="division_id" class="form-control" id="divisionSelect" onchange="filterClassByDivision(this.value)">
+                    <option value="">-- বিভাগ নির্বাচন করুন --</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?=$d['id']?>" <?=$student['division_id']==$d['id']?'selected':''?>>
+                        <?=e($d['division_name_bn'])?>
+                    </option>
+                    <?php endforeach; ?>
+                </select></div>
             <div class="form-group"><label>শ্রেণী</label>
-                <select name="class_id" class="form-control" onchange="loadSections(this.value)">
+                <select name="class_id" class="form-control" id="classSelect" onchange="loadSections(this.value)">
                     <?php foreach($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$student['class_id']==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                    <option value="<?=$c['id']?>" data-div="<?=$c['division_id']?>"
+                        <?=$student['class_id']==$c['id']?'selected':''?>
+                        style="display:<?= (!$student['division_id'] || $c['division_id']==$student['division_id']) ? '' : 'none' ?>;">
+                        <?=e($c['class_name_bn'])?>
+                    </option>
                     <?php endforeach; ?>
                 </select></div>
             <div class="form-group"><label>শাখা</label>
@@ -516,6 +530,16 @@ function toggleHostel(cb) {
 function toggleFood(cb) {
     document.getElementById('foodFields').style.display = cb.checked ? 'block' : 'none';
     if (!cb.checked) document.getElementById('foodFee').value = 0;
+}
+function filterClassByDivision(divId) {
+    const classSel = document.getElementById('classSelect');
+    const secSel   = document.getElementById('sectionSelect');
+    classSel.value = '';
+    if (secSel) secSel.innerHTML = '<option value="">শ্রেণী নির্বাচন করুন আগে</option>';
+    Array.from(classSel.options).forEach(opt => {
+        if (!opt.value) { opt.style.display = ''; return; }
+        opt.style.display = (!divId || opt.dataset.div === divId) ? '' : 'none';
+    });
 }
 function loadSections(classId) {
     const sel = document.getElementById('sectionSelect');
