@@ -1,438 +1,393 @@
 <?php
+// modules/fees/collection.php
+// ফি সংগ্রহ পেজ - ফিক্সড ভার্সন
+
 require_once '../../includes/functions.php';
-requireLogin(['super_admin','principal','accountant']);
+requireLogin();
+$pdo = getDB();
+
+// বিভাগ লোড
+$divisions = $pdo->query("SELECT * FROM divisions ORDER BY name_bn")->fetchAll();
+
+// শ্রেণী লোড
+$classes = $pdo->query("SELECT c.*, d.name_bn as division_name FROM classes c LEFT JOIN divisions d ON c.division_id = d.id ORDER BY c.name_bn")->fetchAll();
+
+// URL থেকে student_id ও division_id নেওয়া
+$selected_division = isset($_GET['division_id']) ? intval($_GET['division_id']) : '';
+$selected_student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : '';
+$selected_class_id = isset($_GET['class_id']) ? intval($_GET['class_id']) : '';
+
+// সিলেক্টেড স্টুডেন্ট তথ্য
+$student = null;
+if ($selected_student_id) {
+    $stmt = $pdo->prepare("SELECT s.*, c.name_bn as class_name, d.name_bn as division_name 
+                           FROM students s 
+                           LEFT JOIN classes c ON s.class_id = c.id 
+                           LEFT JOIN divisions d ON c.division_id = d.id 
+                           WHERE s.id = ?");
+    $stmt->execute([$selected_student_id]);
+    $student = $stmt->fetch();
+}
+
+// লেনদেন হিস্ট্রি লোড (fee_collections টেবিল থেকে)
+$transactions = [];
+if ($selected_student_id) {
+    $stmt = $pdo->prepare("SELECT fc.*, ft.fee_name_bn as fee_type_name 
+                           FROM fee_collections fc 
+                           LEFT JOIN fee_types ft ON fc.fee_type_id = ft.id 
+                           WHERE fc.student_id = ? 
+                           ORDER BY fc.payment_date DESC 
+                           LIMIT 20");
+    $stmt->execute([$selected_student_id]);
+    $transactions = $stmt->fetchAll();
+}
+
 $pageTitle = 'ফি সংগ্রহ';
-$db = getDB();
-
-$feeTypes  = $db->query("SELECT * FROM fee_types WHERE is_active=1")->fetchAll();
-$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
-$divisionId = (int)($_GET['division_id'] ?? 0);
-$selectedClassId = (int)($_GET['class_id'] ?? 0);
-
-// Collect fee
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['collect_fee'])) {
-    if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF Error');
-
-    $studentId = (int)$_POST['student_id'];
-    $feeTypeId = (int)$_POST['fee_type_id'];
-    $amount = (float)$_POST['amount'];
-    $discount = (float)($_POST['discount'] ?? 0);
-    $fine = (float)($_POST['fine'] ?? 0);
-    $paidAmount = $amount - $discount + $fine;
-    $paymentDate = $_POST['payment_date'] ?? date('Y-m-d');
-    $method = $_POST['payment_method'] ?? 'cash';
-    $txnId = trim($_POST['transaction_id'] ?? '');
-    $monthYear = $_POST['month_year'] ?? date('Y-m');
-    $notes = trim($_POST['notes'] ?? '');
-    $receiptNo = generateReceiptNo();
-
-    $stmt = $db->prepare("INSERT INTO fee_collections 
-        (student_id, fee_type_id, amount, discount, fine, paid_amount, payment_date, payment_method, transaction_id, month_year, receipt_number, collected_by, notes)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    $stmt->execute([$studentId,$feeTypeId,$amount,$discount,$fine,$paidAmount,$paymentDate,$method,$txnId,$monthYear,$receiptNo,$_SESSION['user_id'],$notes]);
-
-    logActivity($_SESSION['user_id'], 'fee_collect', 'fees', "ফি আদায়: ছাত্র #$studentId, ৳$paidAmount, রসিদ: $receiptNo");
-    setFlash('success', "ফি সংগ্রহ সফল! রসিদ নম্বর: $receiptNo");
-    header('Location: receipt.php?id=' . $db->lastInsertId());
-    exit;
-}
-
-// Search student
-$studentResult = null;
-$studentFees = [];
-$customFeeMap = [];
-if (isset($_GET['student_id'])) {
-    $sid = (int)$_GET['student_id'];
-    $stmt = $db->prepare("SELECT s.*, c.class_name_bn FROM students s LEFT JOIN classes c ON s.class_id=c.id WHERE s.id=?");
-    $stmt->execute([$sid]);
-    $studentResult = $stmt->fetch();
-    if (!$selectedClassId && !empty($studentResult['class_id'])) {
-        $selectedClassId = (int)$studentResult['class_id'];
-    }
-
-    $stmt2 = $db->prepare("SELECT fc.*, ft.fee_name_bn FROM fee_collections fc
-        JOIN fee_types ft ON fc.fee_type_id = ft.id
-        WHERE fc.student_id=? ORDER BY fc.payment_date DESC, fc.id DESC");
-    $stmt2->execute([$sid]);
-    $studentFees = $stmt2->fetchAll();
-
-    // Load custom fee assignments for this student
-    $cfStmt = $db->prepare("SELECT fee_type_id, custom_amount FROM student_fee_assignments WHERE student_id=? AND is_active=1");
-    $cfStmt->execute([$sid]);
-    foreach ($cfStmt->fetchAll() as $cf) {
-        $customFeeMap[$cf['fee_type_id']] = $cf['custom_amount'];
-    }
-}
-
 require_once '../../includes/header.php';
 ?>
-<div class="section-header">
-    <h2 class="section-title"><i class="fas fa-money-bill-wave"></i> ফি সংগ্রহ</h2>
-    <div style="display:flex;gap:8px;">
-        <a href="due.php" class="btn btn-warning btn-sm"><i class="fas fa-exclamation"></i> বকেয়া</a>
-        <a href="report.php" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> রিপোর্ট</a>
-    </div>
-</div>
 
-<!-- Search Student -->
-<div class="card mb-16">
-    <div class="card-header"><span class="card-title"><i class="fas fa-search"></i> ছাত্র খুঁজুন</span></div>
-    <div class="card-body" style="padding:14px 20px;">
-        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
-            <!-- Division filter -->
-            <div style="flex:0 0 140px;min-width:120px;">
-                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">বিভাগ</label>
-                <select id="divisionFilter" class="form-control" style="padding:8px;" onchange="onDivisionChange(this.value)">
-                    <option value="">সব বিভাগ</option>
-                    <?php foreach ($divisions as $d): ?>
-                    <option value="<?= $d['id'] ?>" <?= $divisionId == $d['id'] ? 'selected' : '' ?>>
-                        <?= e($d['division_name_bn']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <!-- Class filter -->
-            <div style="flex:0 0 150px;min-width:130px;">
-                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">শ্রেণী দিয়ে ফিল্টার</label>
-                <select id="classFilter" class="form-control" style="padding:8px;" onchange="loadStudentsByClass(this.value)">
-                    <option value="">সব শ্রেণী</option>
-                    <?php
-                    if ($divisionId) {
-                        $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
-                        $clsStmt->execute([$divisionId]);
-                        $classes = $clsStmt->fetchAll();
-                    } else {
-                        $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
-                    }
-                    foreach ($classes as $c):
-                    ?>
-                    <option value="<?=$c['id']?>" data-div="<?=$c['division_id']?>" <?= $selectedClassId == (int)$c['id'] ? 'selected' : '' ?>>
-                        <?php if (!$divisionId): ?><?= e($c['division_name_bn'] ?? '') ?> → <?php endif; ?>
-                        <?=e($c['class_name_bn'])?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <!-- Student dropdown -->
-            <div style="flex:1;min-width:180px;max-width:280px;">
-                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">ছাত্র নির্বাচন</label>
-                <select id="studentSelect" class="form-control" style="padding:8px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;" onchange="selectStudentFromDropdown(this.value)">
-                    <?php if ($studentResult): ?>
-                    <option value="<?= $studentResult['id'] ?>" selected>
-                        <?= e($studentResult['name_bn'] ?? $studentResult['name']) ?> — <?= e($studentResult['student_id']) ?>
-                    </option>
-                    <?php else: ?>
-                    <option value="">ছাত্র নির্বাচন করুন</option>
-                    <?php endif; ?>
-                </select>
-            </div>
-            <!-- Name/ID search -->
-            <div style="flex:1;min-width:180px;">
-                <label style="font-size:12px;color:#718096;display:block;margin-bottom:4px;">নাম বা ID দিয়ে খুঁজুন</label>
-                <div style="display:flex;gap:8px;">
-                    <input type="text" id="studentSearch" class="form-control" placeholder="নাম, ID, বা ফোন নম্বর...">
-                    <button type="button" class="btn btn-primary" onclick="searchStudent()"><i class="fas fa-search"></i></button>
-                </div>
-            </div>
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4><i class="fas fa-money-bill-wave"></i> ফি সংগ্রহ</h4>
+        <div>
+            <a href="due.php" class="btn btn-danger btn-sm me-2"><i class="fas fa-exclamation-circle"></i> বাকিয়া</a>
+            <a href="report.php" class="btn btn-outline-secondary btn-sm"><i class="fas fa-chart-bar"></i> রিপোর্ট</a>
         </div>
     </div>
-</div>
 
-<div class="grid-2">
-    <!-- Fee Collection Form -->
-    <div class="card">
-        <div class="card-header" style="background:#eafaf1;">
-            <span class="card-title" style="color:var(--success);"><i class="fas fa-plus-circle"></i> ফি জমা নিন</span>
-        </div>
+    <!-- ছাত্র খুঁজুন সেকশন -->
+    <div class="card mb-3">
         <div class="card-body">
-            <?php if ($studentResult): ?>
-            <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-                <div class="avatar" style="width:44px;height:44px;font-size:16px;">
-                    <?= mb_substr($studentResult['name_bn'] ?? $studentResult['name'], 0, 1) ?>
+            <h6 class="mb-3"><i class="fas fa-search"></i> ছাত্র খুঁজুন</h6>
+            
+            <div class="row g-2 align-items-end">
+                <!-- বিভাগ -->
+                <div class="col-md-2">
+                    <label class="form-label small">বিভাগ</label>
+                    <select id="division_id" class="form-select form-select-sm" onchange="filterClasses()">
+                        <option value="">সকল বিভাগ</option>
+                        <?php foreach ($divisions as $div): ?>
+                            <option value="<?= $div['id'] ?>" <?= ($selected_division == $div['id']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($div['name_bn']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
-                <div>
-                    <div style="font-weight:700;font-size:15px;"><?= e($studentResult['name_bn'] ?? $studentResult['name']) ?></div>
-                    <div style="font-size:12px;color:var(--text-muted);">
-                        ID: <?= e($studentResult['student_id']) ?> &bull; <?= e($studentResult['class_name_bn']) ?>
+                
+                <!-- শ্রেণী -->
+                <div class="col-md-2">
+                    <label class="form-label small">শ্রেণী দিয়ে ফিল্টার</label>
+                    <select id="class_filter" class="form-select form-select-sm" onchange="loadStudentsByClass()">
+                        <option value="">সব শ্রেণী</option>
+                        <?php foreach ($classes as $cls): ?>
+                            <option value="<?= $cls['id'] ?>" 
+                                    data-division="<?= $cls['division_id'] ?>"
+                                    <?= ($selected_class_id == $cls['id']) ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($cls['name_bn']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- ছাত্র সিলেক্ট ড্রপডাউন -->
+                <div class="col-md-3">
+                    <label class="form-label small">ছাত্র নির্বাচন</label>
+                    <select id="student_select" class="form-select form-select-sm" onchange="selectStudent(this.value)">
+                        <option value="">-- ছাত্র নির্বাচন করুন --</option>
+                    </select>
+                </div>
+
+                <!-- নাম/ID সার্চ -->
+                <div class="col-md-4">
+                    <label class="form-label small">নাম বা ID দিয়ে খুঁজুন</label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" id="search_input" class="form-control" 
+                               placeholder="নাম, ID, বা ফোন নম্বর..." 
+                               onkeyup="searchStudent(this.value)" autocomplete="off">
+                        <button class="btn btn-primary" onclick="searchStudent(document.getElementById('search_input').value)">
+                            <i class="fas fa-search"></i>
+                        </button>
                     </div>
+                    <div id="search_results" class="list-group position-absolute shadow-sm" 
+                         style="z-index:1050; max-height:250px; overflow-y:auto; display:none; width:calc(100% - 24px);">
+                    </div>
+                </div>
+
+                <div class="col-md-1">
+                    <button class="btn btn-outline-secondary btn-sm w-100" onclick="resetSearch()">
+                        <i class="fas fa-redo"></i>
+                    </button>
                 </div>
             </div>
-            <?php endif; ?>
-
-            <form method="POST">
-                <input type="hidden" name="csrf" value="<?= getCsrfToken() ?>">
-                <input type="hidden" name="collect_fee" value="1">
-                <input type="hidden" name="student_id" value="<?= e($studentResult['id'] ?? '') ?>" id="formStudentId">
-
-                <div class="form-grid">
-                    <div class="form-group" style="grid-column:1/-1;">
-                        <label>ফির ধরন <span>*</span></label>
-                        <select name="fee_type_id" class="form-control" required onchange="setAmount(this)">
-                            <option value="">ফির ধরন নির্বাচন করুন</option>
-                            <?php foreach ($feeTypes as $ft):
-                                $customAmt = $customFeeMap[$ft['id']] ?? null;
-                                $displayAmt = $customAmt ?? $ft['amount'];
-                                $isCustom = $customAmt !== null;
-                            ?>
-                            <option value="<?= $ft['id'] ?>"
-                                data-amount="<?= $displayAmt ?>"
-                                data-default="<?= $ft['amount'] ?>"
-                                data-custom="<?= $isCustom ? 1 : 0 ?>">
-                                <?= e($ft['fee_name_bn']) ?>
-                                (৳<?= number_format($displayAmt) ?>
-                                <?= $isCustom ? ' — ব্যক্তিগত' : '' ?>)
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php if (!empty($customFeeMap)): ?>
-                        <small style="color:#e67e22;font-size:11px;"><i class="fas fa-info-circle"></i> এই ছাত্রের জন্য কিছু ফী আলাদাভাবে নির্ধারিত আছে।</small>
-                        <?php endif; ?>
-                    </div>
-                    <div class="form-group">
-                        <label>মাস/বছর</label>
-                        <input type="month" name="month_year" class="form-control" value="<?= date('Y-m') ?>">
-                    </div>
-                    <div class="form-group">
-                        <label>পরিমাণ (৳) <span>*</span></label>
-                        <input type="number" name="amount" class="form-control" id="feeAmount" min="0" step="0.01" required>
-                    </div>
-                    <div class="form-group">
-                        <label>ছাড় (৳)</label>
-                        <input type="number" name="discount" class="form-control" id="feeDiscount" value="0" min="0" step="0.01" onchange="calcTotal()">
-                    </div>
-                    <div class="form-group">
-                        <label>জরিমানা (৳)</label>
-                        <input type="number" name="fine" class="form-control" id="feeFine" value="0" min="0" step="0.01" onchange="calcTotal()">
-                    </div>
-                    <div class="form-group">
-                        <label>পরিশোধের পদ্ধতি</label>
-                        <select name="payment_method" class="form-control" onchange="toggleTxn(this)">
-                            <option value="cash">নগদ</option>
-                            <option value="bkash">bKash</option>
-                            <option value="nagad">Nagad</option>
-                            <option value="rocket">Rocket</option>
-                            <option value="bank">ব্যাংক</option>
-                        </select>
-                    </div>
-                    <div class="form-group" id="txnGroup" style="display:none;">
-                        <label>ট্রানজ্যাকশন ID</label>
-                        <input type="text" name="transaction_id" class="form-control" placeholder="TXN ID">
-                    </div>
-                    <div class="form-group">
-                        <label>পরিশোধের তারিখ</label>
-                        <input type="date" name="payment_date" class="form-control" value="<?= date('Y-m-d') ?>">
-                    </div>
-                </div>
-
-                <!-- Total display -->
-                <div style="background:var(--primary);color:#fff;border-radius:8px;padding:14px 16px;margin:16px 0;display:flex;justify-content:space-between;align-items:center;">
-                    <span style="font-size:14px;">মোট পরিশোধযোগ্য</span>
-                    <span style="font-size:22px;font-weight:700;" id="totalDisplay">৳০</span>
-                </div>
-
-                <div class="form-group">
-                    <label>মন্তব্য</label>
-                    <textarea name="notes" class="form-control" rows="2"></textarea>
-                </div>
-
-                <button type="submit" class="btn btn-success" <?= !$studentResult ? 'disabled' : '' ?>>
-                    <i class="fas fa-check-circle"></i> ফি সংগ্রহ করুন
-                </button>
-            </form>
         </div>
     </div>
 
-    <!-- Recent payments for this student -->
-    <div class="card">
-        <div class="card-header">
-            <span class="card-title"><i class="fas fa-history"></i> পূর্ববর্তী পরিশোধ</span>
-        </div>
-        <div class="card-body" style="padding:0;">
-            <?php if (empty($studentFees)): ?>
-            <div style="text-align:center;padding:30px;color:var(--text-muted);">
-                <?= $studentResult ? 'কোনো পরিশোধের তথ্য নেই' : 'ছাত্র নির্বাচন করুন' ?>
+    <!-- মেইন কন্টেন্ট -->
+    <div class="row">
+        <!-- বাম পাশ: ফি জমা দিন -->
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0 text-success"><i class="fas fa-check-circle"></i> ফি জমা দিন</h6>
+                </div>
+                <div class="card-body">
+                    <?php if ($student): ?>
+                        <div class="d-flex align-items-center p-2 mb-3 rounded" style="background:#e8f4fd;">
+                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3" 
+                                 style="width:45px;height:45px;font-size:18px;font-weight:bold;">
+                                <?= mb_substr($student['name_bn'] ?? $student['name'], 0, 1, 'UTF-8') ?>
+                            </div>
+                            <div>
+                                <strong><?= htmlspecialchars($student['name_bn'] ?? $student['name']) ?></strong><br>
+                                <small class="text-muted">
+                                    ID: <?= htmlspecialchars($student['student_id'] ?? $student['id']) ?> 
+                                    • <?= htmlspecialchars($student['class_name'] ?? '') ?>
+                                    <?= !empty($student['division_name']) ? ' • ' . htmlspecialchars($student['division_name']) : '' ?>
+                                </small>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="process_payment.php" id="feeForm">
+                            <input type="hidden" name="student_id" value="<?= $student['id'] ?>">
+                            
+                            <div class="mb-3">
+                                <label class="form-label">ফিস ধরন *</label>
+                                <select name="fee_type_id" class="form-select" required onchange="updateAmount(this)">
+                                    <option value="">ফিস ধরন নির্বাচন করুন</option>
+                                    <?php
+                                    $fee_types = $pdo->query("SELECT * FROM fee_types WHERE is_active = 1 ORDER BY fee_name_bn")->fetchAll();
+                                    foreach ($fee_types as $ft):
+                                    ?>
+                                        <option value="<?= $ft['id'] ?>" data-amount="<?= $ft['amount'] ?>">
+                                            <?= htmlspecialchars($ft['fee_name_bn']) ?> (<?= $ft['amount'] ?> ৳)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">মাস/বছর</label>
+                                    <input type="month" name="month_year" class="form-control" 
+                                           value="<?= date('Y-m') ?>" required>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">পরিমাণ (৳) *</label>
+                                    <input type="number" name="amount" id="fee_amount" class="form-control" 
+                                           min="0" step="1" required onchange="calculateTotal()">
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">ছাড় (৳)</label>
+                                    <input type="number" name="discount" id="discount" class="form-control" 
+                                           value="0" min="0" onchange="calculateTotal()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">জরিমানা (৳)</label>
+                                    <input type="number" name="fine" id="fine" class="form-control" 
+                                           value="0" min="0" onchange="calculateTotal()">
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">পরিশোধের পদ্ধতি</label>
+                                    <select name="payment_method" class="form-select">
+                                        <option value="cash">নগদ</option>
+                                        <option value="bkash">বিকাশ</option>
+                                        <option value="nagad">নগদ (মোবাইল)</option>
+                                        <option value="bank">ব্যাংক</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">পরিশোধের তারিখ</label>
+                                    <input type="date" name="payment_date" class="form-control" 
+                                           value="<?= date('Y-m-d') ?>">
+                                </div>
+                            </div>
+
+                            <div class="p-3 rounded mb-3 d-flex justify-content-between align-items-center" 
+                                 style="background:#0d6efd;color:#fff;">
+                                <strong>মোট পরিশোধযোগ্য</strong>
+                                <span id="total_display" style="font-size:1.5rem;font-weight:bold;">৳০</span>
+                            </div>
+                            <input type="hidden" name="total_amount" id="total_amount" value="0">
+
+                            <div class="mb-3">
+                                <label class="form-label">মন্তব্য</label>
+                                <textarea name="remarks" class="form-control" rows="2" placeholder="ঐচ্ছিক মন্তব্য..."></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="fas fa-save"></i> পেমেন্ট সংরক্ষণ করুন
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-user-graduate fa-3x mb-3 d-block opacity-50"></i>
+                            <p>প্রথমে একজন ছাত্র নির্বাচন করুন</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
             </div>
-            <?php else: ?>
-            <table>
-                <thead><tr><th>তারিখ</th><th>মাস</th><th>ফির ধরন</th><th>পরিমাণ</th><th>পদ্ধতি</th></tr></thead>
-                <tbody>
-                    <?php foreach ($studentFees as $f): ?>
-                    <tr>
-                        <td style="font-size:12px;white-space:nowrap;"><?= !empty($f['payment_date']) ? e(date('d/m/Y', strtotime($f['payment_date']))) : '' ?></td>
-                        <td style="font-size:12px;"><?= e($f['month_year']) ?></td>
-                        <td style="font-size:13px;"><?= e($f['fee_name_bn']) ?></td>
-                        <td style="font-weight:700;color:var(--success);white-space:nowrap;">৳<?= number_format($f['paid_amount']) ?></td>
-                        <td><span class="badge badge-info" style="font-size:10px;"><?= e($f['payment_method']) ?></span></td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-            <?php endif; ?>
+        </div>
+
+        <!-- ডান পাশ: লেনদেন হিস্ট্রি -->
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0"><i class="fas fa-history"></i> পূর্ববর্তী পরিশোধ</h6>
+                </div>
+                <div class="card-body p-0">
+                    <?php if ($selected_student_id && count($transactions) > 0): ?>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>তারিখ</th>
+                                        <th>ফিস ধরন</th>
+                                        <th>মাস</th>
+                                        <th class="text-end">পরিমাণ</th>
+                                        <th>পদ্ধতি</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php 
+                                    $total_paid = 0;
+                                    foreach ($transactions as $tr): 
+                                        $total_paid += $tr['paid_amount'];
+                                    ?>
+                                        <tr>
+                                            <td class="small"><?= date('d/m/Y', strtotime($tr['payment_date'])) ?></td>
+                                            <td class="small"><?= htmlspecialchars($tr['fee_type_name'] ?? '-') ?></td>
+                                            <td class="small"><?= $tr['month_year'] ?? '-' ?></td>
+                                            <td class="small text-end fw-bold"><?= number_format($tr['paid_amount']) ?> ৳</td>
+                                            <td class="small"><?= htmlspecialchars($tr['payment_method'] ?? 'cash') ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                                <tfoot class="table-light">
+                                    <tr>
+                                        <td colspan="3"><strong>সর্বমোট পরিশোধ</strong></td>
+                                        <td class="text-end"><strong><?= number_format($total_paid) ?> ৳</strong></td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    <?php elseif ($selected_student_id): ?>
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
+                            <small>কোনো পরিশোধের তথ্য নেই</small>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block opacity-50"></i>
+                            <small>ছাত্র নির্বাচন করুন</small>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-function onDivisionChange(divId) {
-    const url = new URL(window.location.href);
-    if (divId) {
-        url.searchParams.set('division_id', divId);
-    } else {
-        url.searchParams.delete('division_id');
-    }
-    url.searchParams.delete('student_id');
-    url.searchParams.delete('class_id');
-    window.location.href = url.toString();
-}
-
-function resetStudentSelect(placeholder) {
-    const select = document.getElementById('studentSelect');
-    select.innerHTML = '';
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = placeholder || 'ছাত্র নির্বাচন করুন';
-    select.appendChild(opt);
-}
-
-function updateStudentSelect(data, selectedId) {
-    const select = document.getElementById('studentSelect');
-    resetStudentSelect(data.length ? 'ছাত্র নির্বাচন করুন' : 'কোনো ছাত্র পাওয়া যায়নি');
-    data.forEach(function(s) {
-        const opt = document.createElement('option');
-        opt.value = s.id;
-        const meta = [
-            s.division_name_bn || '',
-            s.class_name_bn || '',
-            s.roll_number ? 'রোল: ' + s.roll_number : ''
-        ].filter(Boolean).join(' • ');
-        opt.textContent = (s.name_bn || s.name || 'ছাত্র') + ' — রোল: ' + (s.roll_number || '-');
-        if (String(selectedId || '') === String(s.id)) {
-            opt.selected = true;
-        }
-        select.appendChild(opt);
+function filterClasses() {
+    const divId = document.getElementById('division_id').value;
+    const classSelect = document.getElementById('class_filter');
+    const options = classSelect.querySelectorAll('option[data-division]');
+    options.forEach(opt => {
+        opt.style.display = (!divId || opt.dataset.division === divId) ? '' : 'none';
     });
+    classSelect.value = '';
+    document.getElementById('student_select').innerHTML = '<option value="">-- ছাত্র নির্বাচন করুন --</option>';
 }
 
-function loadStudentsByClass(classId, selectedId) {
-    if (!classId) {
-        resetStudentSelect('ছাত্র নির্বাচন করুন');
-        return;
-    }
-    const divId = document.getElementById('divisionFilter').value;
-    resetStudentSelect('লোড হচ্ছে...');
-    let url = '<?= BASE_URL ?>/api/search_student.php?class_id=' + encodeURIComponent(classId) + '&q=';
-    if (divId) url += '&division_id=' + encodeURIComponent(divId);
-    fetch(url)
-        .then(r => r.json())
-        .then(data => updateStudentSelect(data, selectedId))
-        .catch(() => resetStudentSelect('লোড ব্যর্থ'));
+function loadStudentsByClass() {
+    const classId = document.getElementById('class_filter').value;
+    const divId = document.getElementById('division_id').value;
+    const studentSelect = document.getElementById('student_select');
+    if (!classId) { studentSelect.innerHTML = '<option value="">-- ছাত্র নির্বাচন করুন --</option>'; return; }
+    studentSelect.innerHTML = '<option value="">লোড হচ্ছে...</option>';
+    let url = '../../api/search_student.php?class_id=' + classId;
+    if (divId) url += '&division_id=' + divId;
+    fetch(url).then(r => r.json()).then(data => {
+        let html = '<option value="">-- ছাত্র নির্বাচন করুন (' + data.length + ' জন) --</option>';
+        data.forEach(s => { html += '<option value="' + s.id + '">' + (s.name_bn||s.name) + ' - রোল: ' + (s.roll_number||'-') + ' (' + s.student_id + ')</option>'; });
+        studentSelect.innerHTML = html;
+    }).catch(() => { studentSelect.innerHTML = '<option value="">লোড ব্যর্থ</option>'; });
 }
 
-function searchStudent() {
-    const q = document.getElementById('studentSearch').value.trim();
-    const classId = document.getElementById('classFilter').value;
-    const divId = document.getElementById('divisionFilter').value;
-
-    if (q.length < 2) {
-        if (classId) {
-            loadStudentsByClass(classId, document.getElementById('studentSelect').value);
-        } else {
-            resetStudentSelect('ছাত্র নির্বাচন করুন');
-        }
-        return;
-    }
-
-    resetStudentSelect('খোঁজা হচ্ছে...');
-    let url = '<?= BASE_URL ?>/api/search_student.php?q=' + encodeURIComponent(q);
-    if (classId) url += '&class_id=' + encodeURIComponent(classId);
-    if (divId) url += '&division_id=' + encodeURIComponent(divId);
-
-    fetch(url)
-        .then(r => r.json())
-        .then(data => updateStudentSelect(data))
-        .catch(() => resetStudentSelect('লোড ব্যর্থ'));
+function selectStudent(studentId) {
+    if (!studentId) return;
+    const divId = document.getElementById('division_id').value;
+    let url = 'collection.php?student_id=' + studentId;
+    if (divId) url += '&division_id=' + divId;
+    window.location.href = url;
 }
 
-function selectStudentFromDropdown(id) {
-    if (!id) return;
-    const url = new URL(window.location.href);
-    const classId = document.getElementById('classFilter').value;
-    const divId = document.getElementById('divisionFilter').value;
-
-    if (divId) {
-        url.searchParams.set('division_id', divId);
-    } else {
-        url.searchParams.delete('division_id');
-    }
-
-    if (classId) {
-        url.searchParams.set('class_id', classId);
-    } else {
-        url.searchParams.delete('class_id');
-    }
-
-    url.searchParams.set('student_id', id);
-    window.location.href = url.toString();
+let searchTimer = null;
+function searchStudent(query) {
+    clearTimeout(searchTimer);
+    const resultsDiv = document.getElementById('search_results');
+    if (query.length < 2) { resultsDiv.style.display = 'none'; return; }
+    searchTimer = setTimeout(() => {
+        const divId = document.getElementById('division_id').value;
+        let url = '../../api/search_student.php?q=' + encodeURIComponent(query);
+        if (divId) url += '&division_id=' + divId;
+        fetch(url).then(r => r.json()).then(data => {
+            if (data.length === 0) {
+                resultsDiv.innerHTML = '<div class="list-group-item text-muted small">কোনো ছাত্র পাওয়া যায়নি</div>';
+            } else {
+                let html = '';
+                data.forEach(s => {
+                    html += '<a href="collection.php?student_id=' + s.id + '&division_id=' + (divId||'') + '" class="list-group-item list-group-item-action py-2">';
+                    html += '<strong>' + (s.name_bn||s.name) + '</strong><br>';
+                    html += '<small class="text-muted">ID: ' + s.student_id + ' • ' + (s.class_name||'') + '</small></a>';
+                });
+                resultsDiv.innerHTML = html;
+            }
+            resultsDiv.style.display = 'block';
+        });
+    }, 300);
 }
 
-let searchTimeout;
-document.getElementById('studentSearch').addEventListener('input', function() {
-    clearTimeout(searchTimeout);
-    const q = this.value.trim();
-    const classId = document.getElementById('classFilter').value;
-
-    if (q.length < 2) {
-        if (classId) {
-            loadStudentsByClass(classId, document.getElementById('studentSelect').value);
-        } else {
-            resetStudentSelect('ছাত্র নির্বাচন করুন');
-        }
-        return;
-    }
-
-    searchTimeout = setTimeout(() => searchStudent(), 300);
-});
-
-function setAmount(sel) {
-    const opt = sel.selectedOptions[0];
-    const amount = opt.dataset.amount || '';
-    const defaultAmt = opt.dataset.default || '';
-    const isCustom = opt.dataset.custom === '1';
-    document.getElementById('feeAmount').value = amount;
-    let hint = document.getElementById('feeAmountHint');
-    if (!hint) {
-        hint = document.createElement('small');
-        hint.id = 'feeAmountHint';
-        hint.style.cssText = 'font-size:11px;display:block;margin-top:4px;';
-        document.getElementById('feeAmount').parentNode.appendChild(hint);
-    }
-    if (isCustom) {
-        hint.style.color = '#e67e22';
-        hint.innerHTML = '<i class="fas fa-tag"></i> ব্যক্তিগত নির্ধারিত: ৳' + parseFloat(amount).toLocaleString() + ' (ডিফল্ট: ৳' + parseFloat(defaultAmt).toLocaleString() + ')';
-    } else {
-        hint.innerHTML = '';
-    }
-    calcTotal();
+function resetSearch() {
+    document.getElementById('search_input').value = '';
+    document.getElementById('search_results').style.display = 'none';
+    document.getElementById('division_id').value = '';
+    document.getElementById('class_filter').value = '';
+    document.getElementById('student_select').innerHTML = '<option value="">-- ছাত্র নির্বাচন করুন --</option>';
+    window.location.href = 'collection.php';
 }
 
-function calcTotal() {
-    const a = parseFloat(document.getElementById('feeAmount').value) || 0;
-    const d = parseFloat(document.getElementById('feeDiscount').value) || 0;
-    const f = parseFloat(document.getElementById('feeFine').value) || 0;
-    document.getElementById('totalDisplay').textContent = '৳' + (a - d + f).toFixed(2);
+function updateAmount(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    document.getElementById('fee_amount').value = opt.dataset.amount || 0;
+    calculateTotal();
 }
 
-function toggleTxn(sel) {
-    document.getElementById('txnGroup').style.display = sel.value !== 'cash' ? 'block' : 'none';
+function calculateTotal() {
+    const amount = parseFloat(document.getElementById('fee_amount').value) || 0;
+    const discount = parseFloat(document.getElementById('discount').value) || 0;
+    const fine = parseFloat(document.getElementById('fine').value) || 0;
+    const total = amount - discount + fine;
+    document.getElementById('total_display').textContent = '৳' + total;
+    document.getElementById('total_amount').value = total;
 }
-
-document.getElementById('feeAmount').addEventListener('input', calcTotal);
 
 document.addEventListener('DOMContentLoaded', function() {
-    const classId = document.getElementById('classFilter').value;
-    const selectedId = '<?= (int)($studentResult['id'] ?? 0) ?>';
-    if (classId) {
-        loadStudentsByClass(classId, selectedId);
+    filterClasses();
+    const classFilter = document.getElementById('class_filter');
+    if (classFilter.value) loadStudentsByClass();
+});
+
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#search_results') && !e.target.closest('#search_input')) {
+        document.getElementById('search_results').style.display = 'none';
     }
 });
 </script>
