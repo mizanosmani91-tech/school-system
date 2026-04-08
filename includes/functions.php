@@ -8,6 +8,8 @@ require_once __DIR__ . '/config.php';
 // PDO কানেকশন — Railway port support সহ
 function getDB() {
     static $pdo = null;
+    static $failed = false;
+    if ($failed) return null;
     if ($pdo === null) {
         try {
             $dsn = "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
@@ -17,11 +19,9 @@ function getDB() {
                 PDO::ATTR_EMULATE_PREPARES   => false,
             ]);
         } catch (PDOException $e) {
-            die('<div style="color:red;padding:20px;font-family:sans-serif;">
-                <h3>ডাটাবেস সংযোগ ব্যর্থ!</h3>
-                <p>' . htmlspecialchars($e->getMessage()) . '</p>
-                <p><a href="install/">ইনস্টল করুন</a></p>
-            </div>');
+            $failed = true;
+            error_log('DB Connection Failed: ' . $e->getMessage());
+            return null;
         }
     }
     return $pdo;
@@ -62,10 +62,17 @@ function getCurrentUser() {
 // সেটিং পড়া
 function getSetting($key, $default = '') {
     static $settings = [];
-    if (empty($settings)) {
+    static $loaded = false;
+    if (!$loaded) {
+        $loaded = true;
         $db = getDB();
-        $rows = $db->query("SELECT setting_key, setting_value FROM settings")->fetchAll();
-        foreach ($rows as $r) $settings[$r['setting_key']] = $r['setting_value'];
+        if ($db === null) return $default;
+        try {
+            $rows = $db->query("SELECT setting_key, setting_value FROM settings")->fetchAll();
+            foreach ($rows as $r) $settings[$r['setting_key']] = $r['setting_value'];
+        } catch (Exception $e) {
+            return $default;
+        }
     }
     return $settings[$key] ?? $default;
 }
@@ -201,7 +208,7 @@ function callAI($message, $systemPrompt = '', $history = []) {
     ];
 
     // Gemini 1.5 Flash — সম্পূর্ণ বিনামূল্যে (daily 1500 requests)
-    $model = 'gemini-2.5-flash';
+    $model = '<gemini-2 class="5"></gemini-2>-flash';
     $url   = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
     $ch = curl_init($url);
