@@ -12,20 +12,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_settings'])) {
         $val = trim($_POST[$k]??'');
         $db->prepare("INSERT INTO settings (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?")->execute([$k,$val,$val]);
     }
-    // Logo — Cloudinary তে upload (Railway ephemeral filesystem এ local save কাজ করে না)
-    if (!empty($_FILES['logo']['name']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
-        require_once 'includes/cloudinary_upload.php';
-        $cloudinaryUrl = uploadToCloudinary($_FILES['logo']['tmp_name'], 'school/logos');
-        if ($cloudinaryUrl) {
-            $db->prepare("INSERT INTO settings (setting_key,setting_value) VALUES ('logo',?) ON DUPLICATE KEY UPDATE setting_value=?")
-               ->execute([$cloudinaryUrl, $cloudinaryUrl]);
-            setFlash('success','সেটিংস ও লোগো সফলভাবে সংরক্ষিত হয়েছে।');
-        } else {
-            setFlash('warning','সেটিংস সংরক্ষিত হয়েছে, কিন্তু লোগো আপলোড ব্যর্থ হয়েছে। Railway লগ চেক করুন।');
-        }
-    } else {
-        setFlash('success','সেটিংস সংরক্ষিত হয়েছে।');
+    // Logo
+    if (!empty($_FILES['logo']['name'])) {
+        $ext = pathinfo($_FILES['logo']['name'],PATHINFO_EXTENSION);
+        $logoPath = 'logo.'.$ext;
+        $dir = UPLOAD_PATH;
+        if (!is_dir($dir)) mkdir($dir,0755,true);
+        move_uploaded_file($_FILES['logo']['tmp_name'], $dir.$logoPath);
+        $db->prepare("INSERT INTO settings (setting_key,setting_value) VALUES ('logo',?) ON DUPLICATE KEY UPDATE setting_value=?")->execute([$logoPath,$logoPath]);
     }
+    setFlash('success','সেটিংস সংরক্ষিত হয়েছে।');
     header('Location: settings.php'); exit;
 }
 
