@@ -82,7 +82,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $instituteName = getSetting('institute_name', APP_NAME);
-$dbOk = (getDB() !== null);
 ?>
 <!DOCTYPE html>
 <html lang="bn">
@@ -199,13 +198,7 @@ body {
 <div class="login-container">
     <!-- Banner -->
     <div class="login-banner">
-        <?php $logoVal = getSetting('logo',''); ?>
-        <?php if ($logoVal): ?>
-        <img src="<?= str_starts_with($logoVal,'http') ? e($logoVal) : UPLOAD_URL.e($logoVal) ?>"
-             alt="logo" style="width:90px;height:90px;object-fit:contain;margin-bottom:20px;border-radius:14px;background:rgba(255,255,255,.1);padding:6px;">
-        <?php else: ?>
         <i class="fas fa-mosque banner-icon"></i>
-        <?php endif; ?>
         <h2 class="banner-title"><?= e($instituteName) ?></h2>
         <p class="banner-sub">ডিজিটাল শিক্ষা ব্যবস্থাপনা সিস্টেম<br>সকলের জন্য সহজ ও আধুনিক</p>
         <ul class="banner-features">
@@ -238,15 +231,6 @@ body {
             </div>
         </div>
 
-        <?php if (!$dbOk): ?>
-        <div class="error-box" style="background:#fff3cd;border-color:#ffc107;color:#856404;">
-            <i class="fas fa-database"></i>
-            <div>
-                <strong>ডাটাবেস সংযোগ সমস্যা!</strong><br>
-                <small>Railway Variables চেক করুন: MYSQLHOST, MYSQLDATABASE, MYSQLPASSWORD</small>
-            </div>
-        </div>
-        <?php endif; ?>
         <?php if ($error): ?>
         <div class="error-box"><i class="fas fa-exclamation-circle"></i> <?= e($error) ?></div>
         <?php endif; ?>
