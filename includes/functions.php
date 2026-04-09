@@ -137,14 +137,16 @@ function generateStudentId($classId) {
     return 'STU-' . date('Y') . '-' . str_pad($classId, 2, '0', STR_PAD_LEFT) . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
 }
 
-// Pagination
+// Pagination — FIXED: ? বা & সঠিকভাবে ব্যবহার করে
 function paginate($total, $perPage, $currentPage, $url) {
     $totalPages = ceil($total / $perPage);
     if ($totalPages <= 1) return '';
+    // $url এ ইতোমধ্যে ? থাকলে & ব্যবহার করো, না থাকলে ?
+    $separator = (strpos($url, '?') !== false) ? '&' : '?';
     $html = '<nav><ul class="pagination">';
     for ($i = 1; $i <= $totalPages; $i++) {
         $active = $i == $currentPage ? 'active' : '';
-        $html .= '<li class="page-item ' . $active . '"><a class="page-link" href="' . $url . '?page=' . $i . '">' . toBanglaNumber($i) . '</a></li>';
+        $html .= '<li class="page-item ' . $active . '"><a class="page-link" href="' . $url . $separator . 'page=' . $i . '">' . toBanglaNumber($i) . '</a></li>';
     }
     $html .= '</ul></nav>';
     return $html;
@@ -169,10 +171,8 @@ function callAI($message, $systemPrompt = '', $history = []) {
         return ['error' => 'AI API Key সেট করা নেই। Settings থেকে Google Gemini API Key দিন।'];
     }
 
-    // Gemini এর জন্য contents array তৈরি
     $contents = [];
 
-    // System prompt কে প্রথম user/model turn হিসেবে পাঠাতে হয়
     if (!empty($systemPrompt)) {
         $contents[] = [
             'role'  => 'user',
@@ -184,7 +184,6 @@ function callAI($message, $systemPrompt = '', $history = []) {
         ];
     }
 
-    // Chat history (শেষ ১০টি)
     foreach ($history as $h) {
         $role = ($h['role'] === 'assistant') ? 'model' : 'user';
         $contents[] = [
@@ -193,7 +192,6 @@ function callAI($message, $systemPrompt = '', $history = []) {
         ];
     }
 
-    // বর্তমান message
     $contents[] = [
         'role'  => 'user',
         'parts' => [['text' => $message]]
@@ -207,8 +205,7 @@ function callAI($message, $systemPrompt = '', $history = []) {
         ]
     ];
 
-    // Gemini 1.5 Flash — সম্পূর্ণ বিনামূল্যে (daily 1500 requests)
-    $model = '<gemini-2 class="5"></gemini-2>-flash';
+    $model = 'gemini-2.5-flash';
     $url   = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
 
     $ch = curl_init($url);
@@ -225,7 +222,6 @@ function callAI($message, $systemPrompt = '', $history = []) {
 
     $data = json_decode($resp, true);
 
-    // সফল response
     if (isset($data['candidates'][0]['content']['parts'][0]['text'])) {
         return [
             'success' => true,
@@ -233,7 +229,6 @@ function callAI($message, $systemPrompt = '', $history = []) {
         ];
     }
 
-    // Error handle
     $errMsg = $data['error']['message'] ?? ('অজানা ত্রুটি (HTTP ' . $httpCode . ')');
     return ['error' => $errMsg];
 }
