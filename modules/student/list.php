@@ -7,14 +7,12 @@ $db = getDB();
 // Filters
 $divisionFilter = (int)($_GET['division_id'] ?? 0);
 $classFilter    = (int)($_GET['class_id'] ?? 0);
-$search         = trim($_GET['search'] ?? '');
+// FIXED: search থেকে ?page=X বা &page=X সরিয়ে দাও
+$search         = trim(preg_replace('/[?&]page=\d+/', '', $_GET['search'] ?? ''));
 $status         = $_GET['status'] ?? 'active';
 $page           = max(1, (int)($_GET['page'] ?? 1));
 $perPage        = 20;
 $offset         = ($page - 1) * $perPage;
-
-// বিভাগ পরিবর্তন হলে class filter রিসেট
-// (class_id যদি ওই division এর না হয়)
 
 $where  = ["s.academic_year = '" . date('Y') . "'"];
 $params = [];
@@ -60,7 +58,7 @@ $students = $stmt->fetchAll();
 // সব বিভাগ
 $divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
 
-// শ্রেণী — বিভাগ filter থাকলে শুধু সেই বিভাগের শ্রেণী
+// শ্রেণী
 if ($divisionFilter) {
     $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
     $clsStmt->execute([$divisionFilter]);
@@ -69,8 +67,13 @@ if ($divisionFilter) {
     $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
 }
 
-// Pagination link এর জন্য query string
-$paginateBase = 'list.php?division_id=' . $divisionFilter . '&class_id=' . $classFilter . '&status=' . urlencode($status) . '&search=' . urlencode($search);
+// FIXED: Pagination base URL — & দিয়ে জুড়বে, ? দিয়ে নয়
+$paginateBase = 'list.php?' . http_build_query([
+    'division_id' => $divisionFilter,
+    'class_id'    => $classFilter,
+    'status'      => $status,
+    'search'      => $search,
+]);
 
 require_once '../../includes/header.php';
 ?>
@@ -262,16 +265,12 @@ require_once '../../includes/header.php';
 </div>
 
 <script>
-// বিভাগ পরিবর্তন হলে class dropdown filter করে submit
 function onDivisionChange(divId) {
     const classSel = document.getElementById('classFilter');
-    // class_id রিসেট করি
     classSel.value = '';
-    // form submit — server থেকে filtered class list আসবে
     document.getElementById('filterForm').submit();
 }
 
-// Search: ৫০০ms পর auto-submit
 (function(){
     var t;
     document.getElementById('searchInput').addEventListener('input', function(){
