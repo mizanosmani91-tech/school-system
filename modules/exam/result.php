@@ -4,11 +4,23 @@ requireLogin();
 $pageTitle = 'পরীক্ষার ফলাফল';
 $db = getDB();
 
-$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
-$filterClass  = (int)($_GET['class_id'] ?? 0);
-$filterYear   = $_GET['year'] ?? date('Y');
-$filterType   = $_GET['type'] ?? 'final'; // final, half_yearly, annual, model
-$studentId    = (int)($_GET['student_id'] ?? 0);
+$divisionId  = (int)($_GET['division_id'] ?? 0);
+$filterClass = (int)($_GET['class_id'] ?? 0);
+$filterYear  = $_GET['year'] ?? date('Y');
+$filterType  = $_GET['type'] ?? 'final';
+$studentId   = (int)($_GET['student_id'] ?? 0);
+
+// সব বিভাগ
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+
+// শ্রেণী — বিভাগ অনুযায়ী
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
 
 // Subjects
 $subjects = [];
@@ -65,7 +77,7 @@ if ($filterClass && $filterType === 'model') {
 $reportStudent = null;
 $reportResults = [];
 if ($studentId) {
-    $rsStmt = $db->prepare("SELECT * FROM students WHERE id=?");
+    $rsStmt = $db->prepare("SELECT s.*, c.class_name_bn, d.division_name_bn FROM students s LEFT JOIN classes c ON s.class_id=c.id LEFT JOIN divisions d ON s.division_id=d.id WHERE s.id=?");
     $rsStmt->execute([$studentId]);
     $reportStudent = $rsStmt->fetch();
 
@@ -78,7 +90,6 @@ if ($studentId) {
 
 require_once '../../includes/header.php';
 
-// Helper
 function gradeBadge($grade) {
     $map = ['A+'=>'success','A'=>'success','A-'=>'info','B'=>'info','C'=>'warning','D'=>'warning','F'=>'danger'];
     $cls = $map[$grade] ?? 'secondary';
@@ -97,7 +108,7 @@ function gradeBadge($grade) {
 .info-label { color:#718096; font-size:11px; }
 .info-value { font-weight:700; color:#0d2137; margin-top:2px; }
 .result-section { padding:16px; border-bottom:1px solid #e2e8f0; }
-.result-section h3 { font-size:14px; font-weight:700; color:#1a5276; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.result-section h3 { font-size:14px; font-weight:700; color:#1a5276; margin-bottom:12px; }
 .marks-table { width:100%; border-collapse:collapse; font-size:12px; }
 .marks-table th { background:#1a5276; color:#fff; padding:7px 10px; text-align:center; }
 .marks-table td { padding:7px 10px; border-bottom:1px solid #e2e8f0; text-align:center; }
@@ -109,18 +120,14 @@ function gradeBadge($grade) {
 .pass-badge { padding:8px 20px; border-radius:20px; font-weight:700; font-size:15px; }
 .pass-badge.pass { background:#27ae60; }
 .pass-badge.fail { background:#e74c3c; }
-@media print {
-    .no-print { display:none!important; }
-    body { background:#fff; }
-    .report-card { border:1px solid #000; box-shadow:none; }
-}
+@media print { .no-print { display:none!important; } body { background:#fff; } .report-card { border:1px solid #000; } }
 </style>
 
 <div class="section-header no-print">
     <h2 class="section-title"><i class="fas fa-chart-bar"></i> পরীক্ষার ফলাফল</h2>
     <div style="display:flex;gap:8px;">
         <?php if (in_array($_SESSION['role_slug'],['super_admin','principal','teacher'])): ?>
-        <a href="result_entry.php" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> নম্বর এন্ট্রি</a>
+        <a href="index.php?division_id=<?= $divisionId ?>" class="btn btn-primary btn-sm"><i class="fas fa-edit"></i> নম্বর এন্ট্রি</a>
         <?php endif; ?>
         <?php if ($studentId): ?>
         <button onclick="window.print()" class="btn btn-outline btn-sm"><i class="fas fa-print"></i> প্রিন্ট</button>
@@ -128,29 +135,64 @@ function gradeBadge($grade) {
     </div>
 </div>
 
+<!-- বিভাগ Quick-Tab -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="no-print">
+    <a href="result.php?year=<?= $filterYear ?>&type=<?= $filterType ?>"
+       class="btn btn-sm <?= !$divisionId ? 'btn-primary' : 'btn-outline' ?>">
+        <i class="fas fa-layer-group"></i> সব বিভাগ
+    </a>
+    <?php foreach ($divisions as $d): ?>
+    <a href="result.php?division_id=<?= $d['id'] ?>&year=<?= $filterYear ?>&type=<?= $filterType ?>"
+       class="btn btn-sm <?= $divisionId == $d['id'] ? 'btn-primary' : 'btn-outline' ?>">
+        <?= e($d['division_name_bn']) ?>
+    </a>
+    <?php endforeach; ?>
+</div>
+
 <!-- Filter -->
 <div class="card mb-16 no-print">
     <div class="card-body" style="padding:12px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="filterForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <input type="hidden" name="division_id" id="hiddenDivisionId" value="<?= $divisionId ?>">
+
+            <!-- বিভাগ -->
             <div class="form-group" style="margin:0;flex:1;min-width:130px;">
-                <label style="font-size:12px;">শ্রেণী</label>
-                <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
-                    <option value="">শ্রেণী নির্বাচন</option>
-                    <?php foreach ($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="onDivisionChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $divisionId == $d['id'] ? 'selected' : '' ?>><?= e($d['division_name_bn']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="form-group" style="margin:0;flex:1;min-width:110px;">
-                <label style="font-size:12px;">বর্ষ</label>
+
+            <!-- শ্রেণী -->
+            <div class="form-group" style="margin:0;flex:1;min-width:130px;">
+                <label style="font-size:12px;font-weight:600;">শ্রেণী</label>
+                <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
+                    <option value="">শ্রেণী নির্বাচন</option>
+                    <?php foreach ($classes as $c): ?>
+                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>>
+                        <?php if (!$divisionId): ?><?= e($c['division_name_bn']) ?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- বর্ষ -->
+            <div class="form-group" style="margin:0;flex:1;min-width:100px;">
+                <label style="font-size:12px;font-weight:600;">বর্ষ</label>
                 <select name="year" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <?php foreach ([date('Y'), date('Y')-1] as $y): ?>
                     <option value="<?=$y?>" <?=$filterYear==$y?'selected':''?>><?=$y?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- ফলাফলের ধরন -->
             <div class="form-group" style="margin:0;flex:1;min-width:150px;">
-                <label style="font-size:12px;">ফলাফলের ধরন</label>
+                <label style="font-size:12px;font-weight:600;">ফলাফলের ধরন</label>
                 <select name="type" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <option value="final"      <?=$filterType==='final'?'selected':''?>>চূড়ান্ত ফলাফল</option>
                     <option value="half_yearly" <?=$filterType==='half_yearly'?'selected':''?>>অর্ধ বার্ষিক</option>
@@ -158,142 +200,98 @@ function gradeBadge($grade) {
                     <option value="model"      <?=$filterType==='model'?'selected':''?>>মডেল টেস্ট</option>
                 </select>
             </div>
+
             <?php if ($filterClass && !empty($students)): ?>
             <div class="form-group" style="margin:0;flex:2;min-width:160px;">
-                <label style="font-size:12px;">ছাত্র (Report Card)</label>
+                <label style="font-size:12px;font-weight:600;">ছাত্র (Report Card)</label>
                 <select name="student_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
-                    <option value="">সকল ছাত্র</option>
+                    <option value="">ছাত্র নির্বাচন করুন</option>
                     <?php foreach ($students as $st): ?>
-                    <option value="<?=$st['id']?>" <?=$studentId==$st['id']?'selected':''?>><?=e($st['name_bn']??$st['name'])?></option>
+                    <option value="<?=$st['id']?>" <?=$studentId==$st['id']?'selected':''?>>
+                        <?=e($st['name_bn']??$st['name'])?> (রোল: <?=$st['roll_number']?>)
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <?php endif; ?>
-            <input type="hidden" name="class_id" value="<?=$filterClass?>">
         </form>
     </div>
 </div>
 
-<?php /* ═══ SINGLE STUDENT REPORT CARD ═══ */
-if ($studentId && $reportStudent && !empty($reportResults)): ?>
-
+<?php /* ═══ REPORT CARD ═══ */
+if ($reportStudent && !empty($reportResults)): ?>
 <div class="report-card">
     <div class="report-header">
-        <h2><?= e(getSetting('institute_name', 'মাদ্রাসা')) ?></h2>
-        <p>বার্ষিক রিপোর্ট কার্ড — <?= $filterYear ?></p>
+        <h2><?= e($reportStudent['name_bn'] ?? $reportStudent['name']) ?></h2>
+        <p>
+            <?php if (!empty($reportStudent['division_name_bn'])): ?>
+            <?= e($reportStudent['division_name_bn']) ?> —
+            <?php endif; ?>
+            <?= e($reportStudent['class_name_bn'] ?? '') ?> |
+            রোল: <?= e($reportStudent['roll_number']) ?> |
+            ID: <?= e($reportStudent['student_id']) ?>
+        </p>
+        <p style="margin-top:4px;font-size:12px;opacity:.7;"><?= $filterYear ?> শিক্ষাবর্ষ</p>
     </div>
-
-    <div class="report-student-info">
-        <div class="info-cell"><div class="info-label">ছাত্রের নাম</div><div class="info-value"><?=e($reportStudent['name_bn']??$reportStudent['name'])?></div></div>
-        <div class="info-cell"><div class="info-label">Student ID</div><div class="info-value"><?=e($reportStudent['student_id'])?></div></div>
-        <div class="info-cell"><div class="info-label">রোল নম্বর</div><div class="info-value"><?=e($reportStudent['roll_number'])?></div></div>
-        <div class="info-cell"><div class="info-label">মেধাক্রম</div><div class="info-value"><?=e($reportResults[0]['merit_position'] ?? '—')?></div></div>
-    </div>
-
-    <!-- Half Yearly -->
     <div class="result-section">
-        <h3><i class="fas fa-calendar-half"></i> অর্ধ বার্ষিক ফলাফল</h3>
         <table class="marks-table">
-            <thead><tr><th>বিষয়</th><th>১ম মডেল (২০)</th><th>২য় মডেল (২০)</th><th>মডেল গড় (২০)</th><th>পরীক্ষা (৮০)</th><th>মোট (১০০)</th><th>গ্রেড</th></tr></thead>
+            <thead>
+                <tr>
+                    <th style="text-align:left;">বিষয়</th>
+                    <th>অর্ধ বার্ষিক</th>
+                    <th>বার্ষিক</th>
+                    <th>চূড়ান্ত</th>
+                    <th>গ্রেড</th>
+                    <th>GPA</th>
+                </tr>
+            </thead>
             <tbody>
-            <?php foreach ($reportResults as $r): ?>
-            <tr>
-                <td style="text-align:left;font-weight:600;"><?=e($r['subject_name_bn'])?></td>
-                <td><?=$r['model1_marks']?></td>
-                <td><?=$r['model2_marks']?></td>
-                <td><?=round(($r['model1_marks']+$r['model2_marks'])/2,1)?></td>
-                <td><?=$r['half_yearly_marks']?></td>
-                <td style="font-weight:700;"><?=$r['half_yearly_total']?></td>
-                <td><?=gradeBadge($r['half_yearly_grade'])?></td>
-            </tr>
-            <?php endforeach; ?>
+                <?php
+                $totalFinal = 0; $totalGP = 0; $count = 0; $allPass = true;
+                foreach ($reportResults as $rr):
+                    $totalFinal += $rr['final_marks'] ?? 0;
+                    $totalGP    += $rr['final_grade_point'] ?? 0;
+                    $count++;
+                    if (($rr['final_grade'] ?? '') === 'F') $allPass = false;
+                ?>
+                <tr>
+                    <td style="text-align:left;font-weight:600;"><?= e($rr['subject_name_bn']) ?></td>
+                    <td><?= $rr['half_yearly_total'] ?? '-' ?></td>
+                    <td><?= $rr['annual_total'] ?? '-' ?></td>
+                    <td style="font-weight:700;"><?= $rr['final_marks'] ?? '-' ?></td>
+                    <td><?= gradeBadge($rr['final_grade'] ?? '-') ?></td>
+                    <td><?= $rr['final_grade_point'] ?? '-' ?></td>
+                </tr>
+                <?php endforeach; ?>
             </tbody>
         </table>
     </div>
-
-    <!-- Annual -->
-    <div class="result-section">
-        <h3><i class="fas fa-calendar"></i> বার্ষিক ফলাফল</h3>
-        <table class="marks-table">
-            <thead><tr><th>বিষয়</th><th>৩য় মডেল (২০)</th><th>৪র্থ মডেল (২০)</th><th>মডেল গড় (২০)</th><th>পরীক্ষা (৮০)</th><th>মোট (১০০)</th><th>গ্রেড</th></tr></thead>
-            <tbody>
-            <?php foreach ($reportResults as $r): ?>
-            <tr>
-                <td style="text-align:left;font-weight:600;"><?=e($r['subject_name_bn'])?></td>
-                <td><?=$r['model3_marks']?></td>
-                <td><?=$r['model4_marks']?></td>
-                <td><?=round(($r['model3_marks']+$r['model4_marks'])/2,1)?></td>
-                <td><?=$r['annual_marks']?></td>
-                <td style="font-weight:700;"><?=$r['annual_total']?></td>
-                <td><?=gradeBadge($r['annual_grade'])?></td>
-            </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Final -->
-    <div class="result-section">
-        <h3><i class="fas fa-star"></i> চূড়ান্ত ফলাফল</h3>
-        <table class="marks-table">
-            <thead><tr><th>বিষয়</th><th>অর্ধ বার্ষিক (১০০)</th><th>বার্ষিক (১০০)</th><th>চূড়ান্ত (১০০)</th><th>গ্রেড</th><th>GPA</th><th>পাস/ফেল</th></tr></thead>
-            <tbody>
-            <?php
-            $totalGP = 0; $subCount = 0; $allPassed = true;
-            foreach ($reportResults as $r):
-                $totalGP += $r['final_grade_point'];
-                $subCount++;
-                if ($r['final_grade'] === 'F') $allPassed = false;
-            ?>
-            <tr>
-                <td style="text-align:left;font-weight:600;"><?=e($r['subject_name_bn'])?></td>
-                <td><?=$r['half_yearly_total']?></td>
-                <td><?=$r['annual_total']?></td>
-                <td style="font-weight:700;"><?=$r['final_marks']?></td>
-                <td><?=gradeBadge($r['final_grade'])?></td>
-                <td><?=$r['final_grade_point']?></td>
-                <td><?=$r['is_passed'] ? '<span style="color:#27ae60;font-weight:700;">✓ পাস</span>' : '<span style="color:#e74c3c;font-weight:700;">✗ ফেল</span>'?></td>
-            </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Summary -->
     <div class="final-box">
         <div class="final-stat">
-            <div class="val"><?=$reportResults[0]['merit_position'] ?? '—'?></div>
-            <div class="lbl">মেধাক্রম</div>
+            <div class="val"><?= round($totalFinal, 1) ?></div>
+            <div class="lbl">মোট নম্বর</div>
         </div>
         <div class="final-stat">
-            <div class="val"><?=$subCount > 0 ? round($totalGP/$subCount, 2) : '0.00'?></div>
+            <div class="val"><?= $count > 0 ? round($totalGP/$count, 2) : 0 ?></div>
             <div class="lbl">GPA</div>
         </div>
-        <div class="final-stat">
-            <div class="val"><?=round(array_sum(array_column($reportResults,'final_marks'))/$subCount, 2)?></div>
-            <div class="lbl">গড় নম্বর</div>
+        <div class="pass-badge <?= $allPass ? 'pass' : 'fail' ?>">
+            <?= $allPass ? '✓ উত্তীর্ণ' : '✗ অনুত্তীর্ণ' ?>
         </div>
-        <span class="pass-badge <?=$allPassed?'pass':'fail'?>">
-            <?=$allPassed ? '✓ উত্তীর্ণ' : '✗ অনুত্তীর্ণ'?>
-        </span>
     </div>
 </div>
 
 <?php /* ═══ MODEL TEST LIST ═══ */
 elseif ($filterType === 'model' && !empty($modelResults)): ?>
-
-<?php foreach ($modelResults as $examId => $mData):
+<?php foreach ($modelResults as $mxId => $mData):
     $mx    = $mData['exam'];
     $marks = $mData['marks'];
-
-    // Group by student
     $byStudent = [];
     foreach ($marks as $m) {
         $byStudent[$m['student_id']]['info'] = ['name_bn'=>$m['name_bn'],'name'=>$m['name'],'roll'=>$m['roll_number']];
         $byStudent[$m['student_id']]['marks'][$m['subject_id']] = $m['total_marks'];
         $byStudent[$m['student_id']]['total'] = ($byStudent[$m['student_id']]['total'] ?? 0) + $m['total_marks'];
     }
-    // Sort by total desc
     uasort($byStudent, fn($a,$b) => $b['total'] <=> $a['total']);
     $pos = 1;
 ?>
@@ -307,17 +305,13 @@ elseif ($filterType === 'model' && !empty($modelResults)): ?>
     <?php else: ?>
     <div style="overflow-x:auto;">
         <table>
-            <thead>
-                <tr>
-                    <th>অবস্থান</th>
-                    <th>রোল</th>
-                    <th>নাম</th>
-                    <?php foreach ($subjects as $sub): ?>
-                    <th style="text-align:center;"><?=e($sub['subject_name_bn'])?><br><span style="font-size:10px;font-weight:400;">/২০</span></th>
-                    <?php endforeach; ?>
-                    <th style="text-align:center;">মোট</th>
-                </tr>
-            </thead>
+            <thead><tr>
+                <th>অবস্থান</th><th>রোল</th><th>নাম</th>
+                <?php foreach ($subjects as $sub): ?>
+                <th style="text-align:center;"><?=e($sub['subject_name_bn'])?><br><span style="font-size:10px;font-weight:400;">/২০</span></th>
+                <?php endforeach; ?>
+                <th style="text-align:center;">মোট</th>
+            </tr></thead>
             <tbody>
             <?php foreach ($byStudent as $sid => $sd): ?>
             <tr>
@@ -339,7 +333,6 @@ elseif ($filterType === 'model' && !empty($modelResults)): ?>
 
 <?php /* ═══ CLASS RESULT TABLE ═══ */
 elseif ($filterClass && !empty($results)): ?>
-
 <div class="card">
     <div class="card-header">
         <span class="card-title">
@@ -350,31 +343,26 @@ elseif ($filterClass && !empty($results)): ?>
     </div>
     <div style="overflow-x:auto;">
         <table>
-            <thead>
-                <tr>
-                    <th>মেধা</th>
-                    <th>রোল</th>
-                    <th>নাম</th>
-                    <?php foreach ($subjects as $sub): ?>
-                    <th style="text-align:center;font-size:11px;"><?=e($sub['subject_name_bn'])?></th>
-                    <?php endforeach; ?>
-                    <th style="text-align:center;">মোট</th>
-                    <th style="text-align:center;">GPA</th>
-                    <th style="text-align:center;">ফলাফল</th>
-                    <th class="no-print">Report Card</th>
-                </tr>
-            </thead>
+            <thead><tr>
+                <th>মেধা</th><th>রোল</th><th>নাম</th>
+                <?php foreach ($subjects as $sub): ?>
+                <th style="text-align:center;font-size:11px;"><?=e($sub['subject_name_bn'])?></th>
+                <?php endforeach; ?>
+                <th style="text-align:center;">মোট</th>
+                <th style="text-align:center;">GPA</th>
+                <th style="text-align:center;">ফলাফল</th>
+                <th class="no-print">Report Card</th>
+            </tr></thead>
             <tbody>
             <?php
-            // Build student rows
             $studentRows = [];
             foreach ($results as $sid => $subResults) {
                 $first = reset($subResults);
                 $totalFinal = 0; $totalGP = 0; $count = 0; $allPass = true;
                 foreach ($subResults as $sr) {
-                    $field = $filterType==='half_yearly' ? 'half_yearly_total' : ($filterType==='annual' ? 'annual_total' : 'final_marks');
-                    $gpField = $filterType==='half_yearly' ? 'half_yearly_grade_point' : ($filterType==='annual' ? 'annual_grade_point' : 'final_grade_point');
-                    $gradeField = $filterType==='half_yearly' ? 'half_yearly_grade' : ($filterType==='annual' ? 'annual_grade' : 'final_grade');
+                    $field      = $filterType==='half_yearly' ? 'half_yearly_total'       : ($filterType==='annual' ? 'annual_total'       : 'final_marks');
+                    $gpField    = $filterType==='half_yearly' ? 'half_yearly_grade_point'  : ($filterType==='annual' ? 'annual_grade_point'  : 'final_grade_point');
+                    $gradeField = $filterType==='half_yearly' ? 'half_yearly_grade'        : ($filterType==='annual' ? 'annual_grade'        : 'final_grade');
                     $totalFinal += $sr[$field];
                     $totalGP    += $sr[$gpField];
                     $count++;
@@ -393,19 +381,17 @@ elseif ($filterClass && !empty($results)): ?>
             }
             usort($studentRows, fn($a,$b) => $a['merit'] <=> $b['merit']);
             foreach ($studentRows as $row):
+            $field      = $filterType==='half_yearly' ? 'half_yearly_total' : ($filterType==='annual' ? 'annual_total' : 'final_marks');
+            $gradeField = $filterType==='half_yearly' ? 'half_yearly_grade' : ($filterType==='annual' ? 'annual_grade' : 'final_grade');
             ?>
             <tr>
                 <td style="text-align:center;font-weight:700;color:#e67e22;"><?=$row['merit']?></td>
                 <td style="color:#718096;"><?=e($row['roll'])?></td>
                 <td style="font-weight:600;">
-                    <a href="?class_id=<?=$filterClass?>&year=<?=$filterYear?>&student_id=<?=$row['id']?>" style="color:#1a5276;text-decoration:none;"><?=e($row['name'])?></a>
+                    <a href="?division_id=<?=$divisionId?>&class_id=<?=$filterClass?>&year=<?=$filterYear?>&student_id=<?=$row['id']?>" style="color:#1a5276;text-decoration:none;"><?=e($row['name'])?></a>
                 </td>
-                <?php
-                $field = $filterType==='half_yearly' ? 'half_yearly_total' : ($filterType==='annual' ? 'annual_total' : 'final_marks');
-                $gradeField = $filterType==='half_yearly' ? 'half_yearly_grade' : ($filterType==='annual' ? 'annual_grade' : 'final_grade');
-                foreach ($subjects as $sub):
-                    $sr = $row['subs'][$sub['id']] ?? null;
-                ?>
+                <?php foreach ($subjects as $sub):
+                    $sr = $row['subs'][$sub['id']] ?? null; ?>
                 <td style="text-align:center;">
                     <?php if ($sr): ?>
                     <div style="font-weight:700;font-size:13px;"><?=$sr[$field]?></div>
@@ -423,7 +409,7 @@ elseif ($filterClass && !empty($results)): ?>
                     <?php endif; ?>
                 </td>
                 <td class="no-print">
-                    <a href="?class_id=<?=$filterClass?>&year=<?=$filterYear?>&student_id=<?=$row['id']?>" class="btn btn-info btn-xs"><i class="fas fa-id-card"></i> কার্ড</a>
+                    <a href="?division_id=<?=$divisionId?>&class_id=<?=$filterClass?>&year=<?=$filterYear?>&student_id=<?=$row['id']?>" class="btn btn-info btn-xs"><i class="fas fa-id-card"></i> কার্ড</a>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -436,8 +422,17 @@ elseif ($filterClass && !empty($results)): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:40px;color:#718096;">
     <i class="fas fa-calculator" style="font-size:36px;display:block;margin-bottom:12px;opacity:.4;"></i>
     ফলাফল এখনো গণনা করা হয়নি।<br>
-    <a href="result_entry.php?class_id=<?=$filterClass?>&year=<?=$filterYear?>" class="btn btn-primary btn-sm" style="margin-top:12px;">নম্বর এন্ট্রি করুন</a>
+    <a href="index.php?division_id=<?=$divisionId?>&class_id=<?=$filterClass?>&year=<?=$filterYear?>" class="btn btn-primary btn-sm" style="margin-top:12px;">নম্বর এন্ট্রি করুন</a>
 </div></div>
 <?php endif; ?>
+
+<script>
+function onDivisionChange(divId) {
+    document.getElementById('hiddenDivisionId').value = divId;
+    const classSel = document.querySelector('select[name="class_id"]');
+    if (classSel) classSel.value = '';
+    document.getElementById('filterForm').submit();
+}
+</script>
 
 <?php require_once '../../includes/footer.php'; ?>
