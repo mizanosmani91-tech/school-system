@@ -66,6 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // প্রতিষ্ঠানের নাম ইমেজ আপলোড
+    if (!empty($_POST['remove_inst_img']) && $_POST['remove_inst_img'] === '1') {
+        saveIdcs('id_card_inst_name_img_b64', '');
+    } elseif (!empty($_FILES['inst_name_img']['tmp_name']) && $_FILES['inst_name_img']['error'] === UPLOAD_ERR_OK) {
+        $ext = strtolower(pathinfo($_FILES['inst_name_img']['name'], PATHINFO_EXTENSION));
+        if (in_array($ext, ['png','jpg','jpeg','webp','svg'])) {
+            $content = file_get_contents($_FILES['inst_name_img']['tmp_name']);
+            if ($content !== false) {
+                $mime = mime_content_type($_FILES['inst_name_img']['tmp_name']);
+                $b64  = 'data:' . $mime . ';base64,' . base64_encode($content);
+                saveIdcs('id_card_inst_name_img_b64', $b64);
+            }
+        }
+    }
+
     $fields = [
         // স্ট্রিপ
         'id_card_strip_color1','id_card_strip_color2','id_card_strip_use_custom_svg',
@@ -82,6 +97,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // হেডার
         'id_card_arabic_font','id_card_arabic_size','id_card_arabic_color',
         'id_card_bn_font','id_card_bn_size','id_card_bn_color',
+        // হেডার mode + inst name image height
+        'id_card_header_mode','id_card_inst_name_img_height',
         // কার্ড রং
         'id_card_student_color1','id_card_student_color2',
         'id_card_teacher_color1','id_card_teacher_color2',
@@ -190,6 +207,10 @@ $cfg = [
     'back_pr'               => idcs('id_card_back_pr','10'),
     // logo size
     'logo_size'             => idcs('id_card_logo_size','32'),
+    // হেডার mode
+    'header_mode'           => idcs('id_card_header_mode','text'),
+    'inst_name_img_b64'     => idcs('id_card_inst_name_img_b64',''),
+    'inst_name_img_height'  => idcs('id_card_inst_name_img_height','32'),
 ];
 
 $googleFonts = [
@@ -273,7 +294,7 @@ require_once '../../includes/header.php';
     text-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 .pv-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.pv-header { display: flex; align-items: center; gap: 5px; padding-bottom: 5px; margin-bottom: 6px; border-bottom: 2px solid #1a8a3c; }
+.pv-header { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; padding-bottom: 5px; margin-bottom: 6px; border-bottom: 2px solid #1a8a3c; }
 .pv-logo { object-fit: contain; flex-shrink: 0; }
 .pv-logo-placeholder {
     border-radius: 50%;
@@ -370,8 +391,69 @@ require_once '../../includes/header.php';
                 </div>
             </div>
 
+            <!-- প্রতিষ্ঠানের নাম: image বা text -->
             <div class="card">
-                <div class="card-header"><span class="card-title"><i class="fas fa-mosque"></i> হেডার — আরবি লেখা</span></div>
+                <div class="card-header"><span class="card-title"><i class="fas fa-building"></i> প্রতিষ্ঠানের নাম (হেডার)</span></div>
+                <div class="card-body">
+                    <div class="section-label">নাম দেখানোর পদ্ধতি</div>
+                    <div class="field-row" style="margin-bottom:14px;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;">
+                            <input type="radio" name="id_card_header_mode" value="text"
+                                <?= $cfg['header_mode'] !== 'image' ? 'checked' : '' ?>
+                                onchange="toggleHeaderMode()">
+                            <span>📝 টেক্সট (Arabic + Bangla)</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:600;">
+                            <input type="radio" name="id_card_header_mode" value="image"
+                                <?= $cfg['header_mode'] === 'image' ? 'checked' : '' ?>
+                                onchange="toggleHeaderMode()">
+                            <span>🖼️ ইমেজ (PNG/SVG আপলোড)</span>
+                        </label>
+                    </div>
+
+                    <!-- image mode -->
+                    <div id="instImgMode" <?= $cfg['header_mode'] !== 'image' ? 'style="display:none;"' : '' ?>>
+                        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
+                            মাদরাসার নামের ইমেজ আপলোড করুন। PNG transparent বা SVG ব্যবহার করলে সবচেয়ে ভালো দেখাবে।
+                        </p>
+                        <div class="upload-area" onclick="document.getElementById('inst_name_img').click()">
+                            <i class="fas fa-file-image" style="font-size:28px;color:var(--primary-light);margin-bottom:8px;display:block;"></i>
+                            <div style="font-size:13px;font-weight:600;">নামের ইমেজ আপলোড</div>
+                            <div style="font-size:11px;color:var(--text-muted);">PNG / SVG / JPG (transparent background recommended)</div>
+                            <input type="file" id="inst_name_img" name="inst_name_img" accept=".svg,.png,.jpg,.jpeg,.webp" onchange="previewInstImg(this)">
+                            <?php if($cfg['inst_name_img_b64']): ?>
+                            <img src="<?= $cfg['inst_name_img_b64'] ?>" id="instImgPreview" style="max-width:100%;max-height:50px;margin:8px auto 0;display:block;" alt="inst name">
+                            <?php else: ?>
+                            <img src="" id="instImgPreview" style="max-width:100%;max-height:50px;margin:8px auto 0;display:none;" alt="">
+                            <?php endif; ?>
+                        </div>
+                        <?php if($cfg['inst_name_img_b64']): ?>
+                        <div style="margin-top:8px;text-align:center;">
+                            <input type="hidden" name="remove_inst_img" id="removeInstImg" value="0">
+                            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('removeInstImg').value='1';this.textContent='সরানো হবে ✓';"><i class="fas fa-trash"></i> ইমেজ সরান</button>
+                        </div>
+                        <?php else: ?>
+                        <input type="hidden" name="remove_inst_img" id="removeInstImg" value="0">
+                        <?php endif; ?>
+
+                        <div class="section-label" style="margin-top:12px;">ইমেজ উচ্চতা</div>
+                        <div class="field-row">
+                            <div class="form-group">
+                                <label>Height (px) — card এ কতটুকু জায়গা নেবে</label>
+                                <input type="number" name="id_card_inst_name_img_height" class="form-control"
+                                    value="<?= e($cfg['inst_name_img_height']) ?>" min="15" max="55" oninput="updatePreview()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- text mode hint -->
+                    <div id="instTextMode" <?= $cfg['header_mode'] === 'image' ? 'style="display:none;"' : '' ?>>
+                        <p style="font-size:12px;color:var(--text-muted);">
+                            নিচের "হেডার — আরবি লেখা" ও "হেডার — বাংলা নাম" সেকশন থেকে ফন্ট ও সাইজ পরিবর্তন করুন।
+                        </p>
+                    </div>
+                </div>
+            </div>
                 <div class="card-body">
                     <div class="field-row">
                         <div class="form-group">
@@ -971,10 +1053,21 @@ require_once '../../includes/header.php';
                                 <div id="pvLogoImg" style="display:none;"></div>
                                 <div id="pvLogoPlaceholder" class="pv-logo-placeholder">🕌</div>
                                 <?php endif; ?>
-                                <div class="pv-inst">
+                                <!-- institute name: image বা text -->
+                                <?php if ($cfg['header_mode'] === 'image' && $cfg['inst_name_img_b64']): ?>
+                                <img src="<?= $cfg['inst_name_img_b64'] ?>" id="pvInstImg"
+                                    style="max-width:100%;height:<?= (int)$cfg['inst_name_img_height'] ?>px;object-fit:contain;" alt="inst">
+                                <div id="pvInstText" style="display:none;width:100%;text-align:center;">
                                     <div class="pv-arabic" id="pvArabic">مدرسة النجاح لتحفيظ القرآن</div>
                                     <div class="pv-bn" id="pvBn"><?= e(getSetting('institute_name','আন নাজাহ তাহফিজুল কুরআন মাদরাসা')) ?></div>
                                 </div>
+                                <?php else: ?>
+                                <img src="" id="pvInstImg" style="display:none;max-width:100%;object-fit:contain;" alt="inst">
+                                <div id="pvInstText" style="width:100%;text-align:center;">
+                                    <div class="pv-arabic" id="pvArabic">مدرسة النجاح لتحفيظ القرآن</div>
+                                    <div class="pv-bn" id="pvBn"><?= e(getSetting('institute_name','আন নাজাহ তাহফিজুল কুরআন মাদরাসা')) ?></div>
+                                </div>
+                                <?php endif; ?>
                             </div>
                             <div class="pv-photo-wrap">
                                 <div class="pv-photo-box" id="pvPhotoBox">ক</div>
@@ -1056,6 +1149,34 @@ function toggleStripMode() {
     var use = document.getElementById('useCustomSvg').checked;
     document.getElementById('stripColorMode').style.display = use ? 'none' : '';
     document.getElementById('stripSvgMode').style.display   = use ? '' : 'none';
+
+function toggleHeaderMode() {
+    var mode = document.querySelector('input[name="id_card_header_mode"]:checked');
+    if (!mode) return;
+    var isImage = mode.value === 'image';
+    document.getElementById('instImgMode').style.display  = isImage ? '' : 'none';
+    document.getElementById('instTextMode').style.display = isImage ? 'none' : '';
+    updatePreview();
+}
+
+function previewInstImg(input) {
+    if (!input.files || !input.files[0]) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var img = document.getElementById('instImgPreview');
+        img.src = e.target.result;
+        img.style.display = 'block';
+        // preview panel এও দেখাও
+        var pvInstImg = document.getElementById('pvInstImg');
+        if (pvInstImg) {
+            pvInstImg.src = e.target.result;
+            pvInstImg.style.display = 'block';
+        }
+        var pvInstText = document.getElementById('pvInstText');
+        if (pvInstText) pvInstText.style.display = 'none';
+    };
+    reader.readAsDataURL(input.files[0]);
+}
     updatePreview();
 }
 
@@ -1183,16 +1304,32 @@ function updatePreview() {
         pvLP.style.fontSize = (getNum('id_card_logo_size',32)*0.4)+'px';
     }
 
-    // আরবি
+    // আরবি ও বাংলা নাম
     var ar = document.getElementById('pvArabic');
-    ar.style.fontFamily = "'" + (getVal('id_card_arabic_font') || 'Hind Siliguri') + "'";
-    ar.style.fontSize   = (getVal('id_card_arabic_size') || '7.5') + 'px';
-    ar.style.color      = getVal('id_card_arabic_color') || '#1a5276';
-
+    if (ar) {
+        ar.style.fontFamily = "'" + (getVal('id_card_arabic_font') || 'Hind Siliguri') + "'";
+        ar.style.fontSize   = (getVal('id_card_arabic_size') || '7.5') + 'px';
+        ar.style.color      = getVal('id_card_arabic_color') || '#1a5276';
+    }
     var bn = document.getElementById('pvBn');
-    bn.style.fontFamily = "'" + (getVal('id_card_bn_font') || 'Hind Siliguri') + "'";
-    bn.style.fontSize   = (getVal('id_card_bn_size') || '6.5') + 'px';
-    bn.style.color      = getVal('id_card_bn_color') || c1;
+    if (bn) {
+        bn.style.fontFamily = "'" + (getVal('id_card_bn_font') || 'Hind Siliguri') + "'";
+        bn.style.fontSize   = (getVal('id_card_bn_size') || '6.5') + 'px';
+        bn.style.color      = getVal('id_card_bn_color') || c1;
+    }
+
+    // header mode: image বা text
+    var modeEl = document.querySelector('input[name="id_card_header_mode"]:checked');
+    var headerMode = modeEl ? modeEl.value : 'text';
+    var pvInstImg  = document.getElementById('pvInstImg');
+    var pvInstText = document.getElementById('pvInstText');
+    if (headerMode === 'image' && pvInstImg && pvInstImg.src && pvInstImg.src !== window.location.href) {
+        if (pvInstImg) { pvInstImg.style.display = ''; pvInstImg.style.height = getNum('id_card_inst_name_img_height',32)+'px'; }
+        if (pvInstText) pvInstText.style.display = 'none';
+    } else {
+        if (pvInstImg) pvInstImg.style.display = 'none';
+        if (pvInstText) pvInstText.style.display = '';
+    }
 
     // ছবি
     var pbox = document.getElementById('pvPhotoBox');

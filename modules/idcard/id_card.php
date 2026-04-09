@@ -119,6 +119,11 @@ $idc = [
     'sf_c2'       => getSetting('id_card_staff_color2','#8e44ad'),
     'photo_bc'    => getSetting('id_card_photo_border_color','#e67e22'),
     'radius'      => getSetting('id_card_border_radius','10'),
+    // হেডার নাম — image বা text
+    'header_mode' => getSetting('id_card_header_mode','text'),       // 'text' বা 'image'
+    'inst_img'    => getSetting('id_card_inst_name_img_b64',''),     // base64 institute name image
+    'inst_img_h'  => getSetting('id_card_inst_name_img_height','32'), // image height (px)
+    'logo_size'   => getSetting('id_card_logo_size','32'),
 ];
 if ($type === 'teacher')   { $idc['c1']=$idc['t_c1'];  $idc['c2']=$idc['t_c2'];  }
 elseif ($type === 'staff') { $idc['c1']=$idc['sf_c1']; $idc['c2']=$idc['sf_c2']; }
@@ -319,29 +324,34 @@ require_once '../../includes/header.php';
             </div>
 
             <div class="front-body">
-                <!-- লোগো ও প্রতিষ্ঠানের নাম -->
-                <div class="front-header" style="border-bottom-color:<?= e($idc['c1']) ?>;">
-                    <?php if($idc['logo']): ?>
-                    <img src="<?= $idc['logo'] ?>" class="front-logo" alt="logo">
+                <!-- লোগো উপরে মাঝে + নিচে প্রতিষ্ঠানের নাম -->
+                <div class="front-header" style="border-bottom-color:<?= e($idc['c1']) ?>;flex-direction:column;align-items:center;gap:3px;">
+                    <!-- লোগো -->
+                    <?php
+                    $logoSize = (int)($idc['logo_size'] ?? 32);
+                    if ($idc['logo']): ?>
+                    <img src="<?= $idc['logo'] ?>" style="width:<?= $logoSize ?>px;height:<?= $logoSize ?>px;object-fit:contain;" alt="logo">
                     <?php elseif($logoPath): ?>
-                    <img src="<?= BASE_URL.'/'.$logoPath ?>" class="front-logo" alt="logo">
+                    <img src="<?= BASE_URL.'/'.$logoPath ?>" style="width:<?= $logoSize ?>px;height:<?= $logoSize ?>px;object-fit:contain;" alt="logo">
                     <?php else: ?>
-                    <div class="front-logo-placeholder" style="background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);"><i class="fas fa-mosque"></i></div>
+                    <div style="width:<?= $logoSize ?>px;height:<?= $logoSize ?>px;background:linear-gradient(135deg,<?= e($idc['c1']) ?>,<?= e($idc['c2']) ?>);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:<?= (int)($logoSize*0.45) ?>px;flex-shrink:0;">
+                        <i class="fas fa-mosque"></i>
+                    </div>
                     <?php endif; ?>
-                    <div class="front-institute">
-                        <div class="front-institute-arabic" style="
-                            font-family:'<?= e($idc['ar_font']) ?>',sans-serif;
-                            font-size:<?= e($idc['ar_size']) ?>px;
-                            color:<?= e($idc['ar_color']) ?>;">
+
+                    <!-- প্রতিষ্ঠানের নাম: image অথবা text -->
+                    <?php if ($idc['header_mode'] === 'image' && $idc['inst_img']): ?>
+                    <img src="<?= $idc['inst_img'] ?>" style="max-width:100%;height:<?= (int)$idc['inst_img_h'] ?>px;object-fit:contain;" alt="institute name">
+                    <?php else: ?>
+                    <div style="text-align:center;width:100%;">
+                        <div style="font-family:'<?= e($idc['ar_font']) ?>',sans-serif;font-size:<?= e($idc['ar_size']) ?>px;color:<?= e($idc['ar_color']) ?>;font-weight:600;line-height:1.3;direction:rtl;">
                             مدرسة النجاح لتحفيظ القرآن
                         </div>
-                        <div class="front-institute-bn" style="
-                            font-family:'<?= e($idc['bn_font']) ?>',sans-serif;
-                            font-size:<?= e($idc['bn_size']) ?>px;
-                            color:<?= e($idc['bn_color']) ?>;">
+                        <div style="font-family:'<?= e($idc['bn_font']) ?>',sans-serif;font-size:<?= e($idc['bn_size']) ?>px;color:<?= e($idc['bn_color']) ?>;font-weight:700;line-height:1.3;">
                             <?= e($instituteName) ?>
                         </div>
                     </div>
+                    <?php endif; ?>
                 </div>
 
                 <!-- ছাত্রের ছবি -->
@@ -490,7 +500,8 @@ require_once '../../includes/header.php';
     padding: 8px 8px 8px 6px;
 }
 .front-header {
-    display: flex; align-items: center; gap: 5px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 3px;
     border-bottom: 2px solid #1a8a3c;
     padding-bottom: 5px; margin-bottom: 6px;
 }
