@@ -4,14 +4,25 @@ requireLogin(['super_admin','principal','teacher']);
 $pageTitle = 'ফলাফল এন্ট্রি';
 $db = getDB();
 
-$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
-$yearList = [date('Y'), date('Y')-1, date('Y')+1];
-
+$divisionId  = (int)($_GET['division_id'] ?? 0);
 $filterClass = (int)($_GET['class_id'] ?? 0);
 $filterYear  = $_GET['year'] ?? date('Y');
 $filterExam  = (int)($_GET['exam_id'] ?? 0);
+$yearList    = [date('Y'), date('Y')-1, date('Y')+1];
 
-// Exams for selected class
+// সব বিভাগ
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+
+// শ্রেণী — বিভাগ অনুযায়ী
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
+
+// Exams
 $exams = [];
 if ($filterClass) {
     $exStmt = $db->prepare("SELECT * FROM exams ORDER BY academic_year DESC, FIELD(exam_type,'test','half_yearly','annual','monthly','special'), id");
@@ -27,12 +38,11 @@ if ($filterClass) {
         $subStmt->execute([$filterClass]);
         $subjects = $subStmt->fetchAll();
     } catch(Exception $e) {
-        // class_subjects না থাকলে সব subject দেখাও
         $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
     }
 }
 
-// Students for class
+// Students
 $students = [];
 if ($filterClass) {
     $stStmt = $db->prepare("SELECT * FROM students WHERE class_id=? AND status='active' AND academic_year=? ORDER BY roll_number");
@@ -54,6 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_marks'])) {
     $examId   = (int)$_POST['exam_id'];
     $classId  = (int)$_POST['class_id'];
     $year     = $_POST['year'];
+    $divId    = (int)($_POST['division_id'] ?? 0);
     $marksArr = $_POST['marks'] ?? [];
 
     $examInfo = $db->prepare("SELECT * FROM exams WHERE id=?");
@@ -69,12 +80,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_marks'])) {
             $isAbsent   = isset($_POST['absent'][$studentId][$subjectId]) ? 1 : 0;
             $totalMarks = $isAbsent ? 0 : min((float)$marks, $fullMark);
 
-            // Grade only for half_yearly and annual
-            $grade = null; $gradePoint = null;
-            if (!$isModel && !$isAbsent) {
-                // Will be calculated in final result, not here
-            }
-
             $existing = $db->prepare("SELECT id FROM exam_marks WHERE exam_id=? AND student_id=? AND subject_id=?");
             $existing->execute([$examId, $studentId, $subjectId]);
 
@@ -88,25 +93,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_marks'])) {
         }
     }
     setFlash('success', 'নম্বর সংরক্ষিত হয়েছে।');
-    header("Location: result_entry.php?class_id=$classId&year=$year&exam_id=$examId");
+    header("Location: result_entry.php?division_id=$divId&class_id=$classId&year=$year&exam_id=$examId");
     exit;
 }
 
-// Calculate & save final results
+// Calculate final results
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
     if (!verifyCsrf($_POST['csrf'] ?? '')) die('CSRF');
     $classId = (int)$_POST['class_id'];
     $year    = $_POST['year'];
+    $divId   = (int)($_POST['division_id'] ?? 0);
 
-    // Get all exams for this year
     $allExams = $db->prepare("SELECT * FROM exams WHERE academic_year=? ORDER BY id ASC");
     $allExams->execute([$year]);
     $allExams = $allExams->fetchAll();
 
-    // Categorize exams — id অনুযায়ী ক্রম
-    $examMap = ['model1'=>null,'model2'=>null,'half_yearly'=>null,'model3'=>null,'model4'=>null,'annual'=>null];
+    $examMap    = ['model1'=>null,'model2'=>null,'half_yearly'=>null,'model3'=>null,'model4'=>null,'annual'=>null];
     $modelCount = 0;
-    $halfYearlyFound = false;
     foreach ($allExams as $ex) {
         if (in_array($ex['exam_type'], ['test','monthly'])) {
             $modelCount++;
@@ -116,8 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
             elseif ($modelCount === 4) $examMap['model4'] = $ex['id'];
         } elseif ($ex['exam_type'] === 'half_yearly') {
             $examMap['half_yearly'] = $ex['id'];
-            $halfYearlyFound = true;
-            $modelCount = 0; // বার্ষিকের মডেল টেস্ট আলাদা গণনা
+            $modelCount = 0;
         } elseif ($ex['exam_type'] === 'annual') {
             $examMap['annual'] = $ex['id'];
         }
@@ -135,7 +137,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
         $subList = $db->query("SELECT id FROM subjects WHERE is_active=1")->fetchAll(PDO::FETCH_COLUMN);
     }
 
-    // Grade function
     $getGrade = function($marks) {
         if ($marks >= 80) return ['A+', 5.00];
         if ($marks >= 70) return ['A',  4.00];
@@ -156,27 +157,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
 
     foreach ($stList as $studentId) {
         foreach ($subList as $subjectId) {
-            $m1 = $getMark($examMap['model1'],     $studentId, $subjectId) ?? 0;
-            $m2 = $getMark($examMap['model2'],     $studentId, $subjectId) ?? 0;
-            $hy = $getMark($examMap['half_yearly'], $studentId, $subjectId) ?? 0;
-            $m3 = $getMark($examMap['model3'],     $studentId, $subjectId) ?? 0;
-            $m4 = $getMark($examMap['model4'],     $studentId, $subjectId) ?? 0;
-            $an = $getMark($examMap['annual'],     $studentId, $subjectId) ?? 0;
+            $m1 = $getMark($examMap['model1'],      $studentId, $subjectId) ?? 0;
+            $m2 = $getMark($examMap['model2'],      $studentId, $subjectId) ?? 0;
+            $hy = $getMark($examMap['half_yearly'],  $studentId, $subjectId) ?? 0;
+            $m3 = $getMark($examMap['model3'],      $studentId, $subjectId) ?? 0;
+            $m4 = $getMark($examMap['model4'],      $studentId, $subjectId) ?? 0;
+            $an = $getMark($examMap['annual'],      $studentId, $subjectId) ?? 0;
 
-            // Half yearly total = written(80) + model avg(20)
-            $hyModelAvg   = ($m1 + $m2) / 2;
-            $hyTotal      = $hy + $hyModelAvg;
+            $hyModelAvg = ($m1 + $m2) / 2;
+            $hyTotal    = $hy + $hyModelAvg;
             [$hyGrade, $hyGP] = $getGrade($hyTotal);
 
-            // Annual total = written(80) + model avg(20)
-            $anModelAvg   = ($m3 + $m4) / 2;
-            $anTotal      = $an + $anModelAvg;
+            $anModelAvg = ($m3 + $m4) / 2;
+            $anTotal    = $an + $anModelAvg;
             [$anGrade, $anGP] = $getGrade($anTotal);
 
-            // Final = (half_yearly_total + annual_total) / 2
-            $finalMarks   = ($hyTotal + $anTotal) / 2;
+            $finalMarks = ($hyTotal + $anTotal) / 2;
             [$finalGrade, $finalGP] = $getGrade($finalMarks);
-            $isPassed     = $finalGrade !== 'F' ? 1 : 0;
+            $isPassed   = $finalGrade !== 'F' ? 1 : 0;
 
             $db->prepare("INSERT INTO final_results
                 (student_id, class_id, academic_year, subject_id,
@@ -195,14 +193,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
                 final_grade_point=VALUES(final_grade_point), is_passed=VALUES(is_passed)")
                ->execute([
                     $studentId, $classId, $year, $subjectId,
-                    $m1, $m2, $hy, round($hyTotal, 2), $hyGrade, $hyGP,
-                    $m3, $m4, $an, round($anTotal, 2), $anGrade, $anGP,
-                    round($finalMarks, 2), $finalGrade, $finalGP, $isPassed
+                    $m1, $m2, $hy, round($hyTotal,2), $hyGrade, $hyGP,
+                    $m3, $m4, $an, round($anTotal,2), $anGrade, $anGP,
+                    round($finalMarks,2), $finalGrade, $finalGP, $isPassed
                ]);
         }
     }
 
-    // Calculate merit position based on total final_marks
     $meritStmt = $db->prepare("SELECT student_id, SUM(final_marks) as total FROM final_results WHERE class_id=? AND academic_year=? GROUP BY student_id ORDER BY total DESC");
     $meritStmt->execute([$classId, $year]);
     $meritList = $meritStmt->fetchAll();
@@ -212,12 +209,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['calculate_final'])) {
            ->execute([$pos++, $m['student_id'], $classId, $year]);
     }
 
-    setFlash('success', 'চূড়ান্ত ফলাফল গণনা সম্পন্ন হয়েছে! মেধাক্রম নির্ধারিত হয়েছে।');
-    header("Location: result_entry.php?class_id=$classId&year=$year");
+    setFlash('success', 'চূড়ান্ত ফলাফল গণনা সম্পন্ন! মেধাক্রম নির্ধারিত হয়েছে।');
+    header("Location: result_entry.php?division_id=$divId&class_id=$classId&year=$year");
     exit;
 }
 
-// Load existing marks for display
+// Load existing marks
 $existingMarks = [];
 if ($filterExam && $filterClass) {
     $emStmt = $db->prepare("SELECT * FROM exam_marks WHERE exam_id=? AND student_id IN (SELECT id FROM students WHERE class_id=? AND status='active')");
@@ -227,38 +224,83 @@ if ($filterExam && $filterClass) {
     }
 }
 
+// Current class info
+$currentClass = null;
+if ($filterClass) {
+    $ci = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.id=?");
+    $ci->execute([$filterClass]);
+    $currentClass = $ci->fetch();
+}
+
 require_once '../../includes/header.php';
 ?>
 
 <div class="section-header">
     <h2 class="section-title"><i class="fas fa-clipboard-list"></i> ফলাফল এন্ট্রি</h2>
-    <a href="result.php" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> ফলাফল দেখুন</a>
+    <a href="result.php?division_id=<?= $divisionId ?>" class="btn btn-outline btn-sm"><i class="fas fa-chart-bar"></i> ফলাফল দেখুন</a>
+</div>
+
+<!-- বিভাগ Quick-Tab -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="no-print">
+    <a href="result_entry.php?year=<?= $filterYear ?>"
+       class="btn btn-sm <?= !$divisionId ? 'btn-primary' : 'btn-outline' ?>">
+        <i class="fas fa-layer-group"></i> সব বিভাগ
+    </a>
+    <?php foreach ($divisions as $d): ?>
+    <a href="result_entry.php?division_id=<?= $d['id'] ?>&year=<?= $filterYear ?>"
+       class="btn btn-sm <?= $divisionId == $d['id'] ? 'btn-primary' : 'btn-outline' ?>">
+        <?= e($d['division_name_bn']) ?>
+    </a>
+    <?php endforeach; ?>
 </div>
 
 <!-- Filter -->
 <div class="card mb-16">
     <div class="card-body" style="padding:14px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="filterForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <input type="hidden" name="division_id" id="hiddenDivisionId" value="<?= $divisionId ?>">
+
+            <!-- বিভাগ -->
             <div class="form-group" style="margin:0;flex:1;min-width:140px;">
-                <label style="font-size:12px;">শ্রেণী</label>
-                <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
-                    <option value="">শ্রেণী নির্বাচন</option>
-                    <?php foreach ($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="onDivisionChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach ($divisions as $d): ?>
+                    <option value="<?= $d['id'] ?>" <?= $divisionId == $d['id'] ? 'selected' : '' ?>>
+                        <?= e($d['division_name_bn']) ?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="form-group" style="margin:0;flex:1;min-width:120px;">
-                <label style="font-size:12px;">শিক্ষাবর্ষ</label>
+
+            <!-- শ্রেণী -->
+            <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+                <label style="font-size:12px;font-weight:600;">শ্রেণী</label>
+                <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
+                    <option value="">শ্রেণী নির্বাচন</option>
+                    <?php foreach ($classes as $c): ?>
+                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>>
+                        <?php if (!$divisionId): ?><?= e($c['division_name_bn']) ?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- শিক্ষাবর্ষ -->
+            <div class="form-group" style="margin:0;flex:1;min-width:110px;">
+                <label style="font-size:12px;font-weight:600;">শিক্ষাবর্ষ</label>
                 <select name="year" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <?php foreach ($yearList as $y): ?>
                     <option value="<?=$y?>" <?=$filterYear==$y?'selected':''?>><?=$y?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- পরীক্ষা -->
             <?php if ($filterClass && !empty($exams)): ?>
             <div class="form-group" style="margin:0;flex:2;min-width:180px;">
-                <label style="font-size:12px;">পরীক্ষা নির্বাচন</label>
+                <label style="font-size:12px;font-weight:600;">পরীক্ষা নির্বাচন</label>
                 <select name="exam_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <option value="">পরীক্ষা নির্বাচন করুন</option>
                     <?php foreach ($exams as $ex): ?>
@@ -278,7 +320,7 @@ require_once '../../includes/header.php';
     <div class="card-body" style="text-align:center;padding:30px;color:#718096;">
         <i class="fas fa-exclamation-circle" style="font-size:32px;margin-bottom:10px;display:block;"></i>
         এই শ্রেণীর জন্য কোনো পরীক্ষা তৈরি করা হয়নি।<br>
-        <a href="<?=BASE_URL?>/modules/exam/index.php" class="btn btn-primary btn-sm" style="margin-top:12px;">পরীক্ষা তৈরি করুন</a>
+        <a href="<?=BASE_URL?>/modules/exam/index.php?division_id=<?= $divisionId ?>" class="btn btn-primary btn-sm" style="margin-top:12px;">পরীক্ষা তৈরি করুন</a>
     </div>
 </div>
 <?php endif; ?>
@@ -293,6 +335,9 @@ $examLabel = ['test'=>'মডেল টেস্ট','half_yearly'=>'অর্�
     <div class="card-header">
         <span class="card-title">
             <i class="fas fa-edit"></i>
+            <?php if ($currentClass): ?>
+            <span style="color:var(--primary);font-size:12px;font-weight:700;"><?= e($currentClass['division_name_bn']) ?> → </span>
+            <?php endif; ?>
             <?=e($activeExam['exam_name_bn'])?> — <?=$examLabel?> (পূর্ণমান: <?=$fullMark?>)
         </span>
         <?php if ($isModel): ?>
@@ -302,11 +347,12 @@ $examLabel = ['test'=>'মডেল টেস্ট','half_yearly'=>'অর্�
         <?php endif; ?>
     </div>
     <form method="POST">
-        <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
-        <input type="hidden" name="save_marks" value="1">
-        <input type="hidden" name="exam_id" value="<?=$filterExam?>">
-        <input type="hidden" name="class_id" value="<?=$filterClass?>">
-        <input type="hidden" name="year" value="<?=$filterYear?>">
+        <input type="hidden" name="csrf"        value="<?=getCsrfToken()?>">
+        <input type="hidden" name="save_marks"  value="1">
+        <input type="hidden" name="exam_id"     value="<?=$filterExam?>">
+        <input type="hidden" name="class_id"    value="<?=$filterClass?>">
+        <input type="hidden" name="year"        value="<?=$filterYear?>">
+        <input type="hidden" name="division_id" value="<?=$divisionId?>">
         <div style="overflow-x:auto;">
             <table style="min-width:700px;">
                 <thead>
@@ -360,7 +406,6 @@ $examLabel = ['test'=>'মডেল টেস্ট','half_yearly'=>'অর্�
 <?php endif; ?>
 
 <?php if ($filterClass && $filterYear): ?>
-<!-- Calculate Final Result -->
 <div class="card" style="border:2px solid #27ae60;">
     <div class="card-body" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
@@ -370,10 +415,11 @@ $examLabel = ['test'=>'মডেল টেস্ট','half_yearly'=>'অর্�
             </div>
         </div>
         <form method="POST">
-            <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
+            <input type="hidden" name="csrf"            value="<?=getCsrfToken()?>">
             <input type="hidden" name="calculate_final" value="1">
-            <input type="hidden" name="class_id" value="<?=$filterClass?>">
-            <input type="hidden" name="year" value="<?=$filterYear?>">
+            <input type="hidden" name="class_id"        value="<?=$filterClass?>">
+            <input type="hidden" name="year"            value="<?=$filterYear?>">
+            <input type="hidden" name="division_id"     value="<?=$divisionId?>">
             <button type="submit" class="btn btn-success" onclick="return confirm('চূড়ান্ত ফলাফল গণনা করবেন?')">
                 <i class="fas fa-calculator"></i> ফলাফল গণনা করুন
             </button>
@@ -383,6 +429,12 @@ $examLabel = ['test'=>'মডেল টেস্ট','half_yearly'=>'অর্�
 <?php endif; ?>
 
 <script>
+function onDivisionChange(divId) {
+    document.getElementById('hiddenDivisionId').value = divId;
+    const classSel = document.querySelector('select[name="class_id"]');
+    if (classSel) classSel.value = '';
+    document.getElementById('filterForm').submit();
+}
 function toggleAbsent(cb) {
     const input = cb.closest('td').querySelector('.mark-input');
     if (cb.checked) { input.value = ''; input.disabled = true; }
