@@ -235,10 +235,21 @@ require_once '../../includes/header.php';
 <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Roboto:wght@400;700&family=Open+Sans:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Playfair+Display:wght@400;700&family=Raleway:wght@400;700&family=Oswald:wght@400;700&family=Lato:wght@400;700&family=Noto+Serif+Bengali:wght@400;700&family=Tiro+Bangla&family=Baloo+Da+2:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
-.settings-grid { display: grid; grid-template-columns: 1fr 430px; gap: 24px; align-items: start; }
-@media(max-width:1100px){ .settings-grid { grid-template-columns: 1fr; } }
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 500px;
+    gap: 28px;
+    align-items: start;
+}
+@media(max-width:1200px){ .settings-grid { grid-template-columns: 1fr 420px; } }
+@media(max-width:1000px){ .settings-grid { grid-template-columns: 1fr; } }
 .settings-panel { display: flex; flex-direction: column; gap: 16px; }
-.preview-panel { position: sticky; top: 80px; }
+.preview-panel {
+    position: sticky;
+    top: 70px;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+}
 .tab-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 16px; }
 .tab-btn { padding: 7px 14px; border-radius: 7px; border: 1.5px solid var(--border);
     background: #fff; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-muted);
@@ -262,15 +273,31 @@ require_once '../../includes/header.php';
 
 /* ===== লাইভ প্রিভিউ ===== */
 .preview-wrap {
-    display: flex; gap: 10px; justify-content: center;
-    overflow-x: auto; padding: 12px 0;
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 20px 12px;
+    background: linear-gradient(135deg, #1a2a4a 0%, #2d4a7a 50%, #1a3a3a 100%);
+    border-radius: 12px;
+    min-height: 420px;
 }
 .pv-card {
-    width: 204px; height: 323px;
-    overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.2);
-    position: relative; font-family: 'Hind Siliguri', sans-serif;
+    width: 245px;
+    min-width: 245px;
+    max-width: 245px;
+    height: 388px;
+    min-height: 388px;
+    max-height: 388px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.3);
+    position: relative;
+    font-family: 'Hind Siliguri', sans-serif;
     flex-shrink: 0;
+    transition: transform .2s;
 }
+.pv-card:hover { transform: translateY(-4px); }
 .pv-front { background: #fff; display: flex; }
 .pv-strip {
     position: relative; flex-shrink: 0;
@@ -294,7 +321,12 @@ require_once '../../includes/header.php';
     text-shadow: 0 1px 3px rgba(0,0,0,.5);
 }
 .pv-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.pv-header { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; padding-bottom: 5px; margin-bottom: 6px; border-bottom: 2px solid #1a8a3c; }
+.pv-header {
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 3px;
+    padding-bottom: 6px; margin-bottom: 7px;
+    border-bottom: 2px solid #1a8a3c;
+}
 .pv-logo { object-fit: contain; flex-shrink: 0; }
 .pv-logo-placeholder {
     border-radius: 50%;
@@ -302,24 +334,28 @@ require_once '../../includes/header.php';
     color: #fff; flex-shrink: 0; font-weight: 700;
 }
 .pv-inst { flex: 1; text-align: center; overflow: hidden; }
-.pv-arabic { font-size: 7.5px; font-weight: 600; line-height: 1.3; direction: rtl; text-align: center; }
-.pv-bn { font-size: 6.5px; font-weight: 700; line-height: 1.3; text-align: center; }
+.pv-arabic { font-size: 9px; font-weight: 600; line-height: 1.3; direction: rtl; text-align: center; }
+.pv-bn { font-size: 8px; font-weight: 700; line-height: 1.3; text-align: center; }
 .pv-photo-wrap { text-align: center; margin: 4px 0; }
 .pv-photo-box {
-    border: 3px solid #e67e22; border-radius: 4px; display: inline-flex;
+    border: 3px solid #e67e22; border-radius: 5px; display: inline-flex;
     align-items: center; justify-content: center;
-    background: #f0f8f0; font-size: 28px; font-weight: 700; color: #1a8a3c;
+    background: linear-gradient(135deg,#f0f8f0,#e8f5e9);
+    font-size: 32px; font-weight: 700; color: #1a8a3c;
 }
 .pv-name { line-height: 1.2; }
 .pv-name-first { font-size: 14px; font-weight: 700; font-family: 'Libre Baskerville', serif; }
 .pv-name-last  { font-size: 14px; font-weight: 400; font-family: 'Libre Baskerville', serif; color: #333; }
-.pv-id { font-size: 8.5px; font-weight: 700; color: #555; margin: 2px 0 5px; letter-spacing: 0.5px; }
+.pv-id { font-size: 9px; font-weight: 700; color: #555; margin: 2px 0 5px; letter-spacing: 0.5px; }
 .pv-table { padding-top: 5px; }
-.pv-row { display: flex; font-size: 8px; }
+.pv-row { display: flex; font-size: 9px; }
 .pv-label { font-weight: 600; }
 .pv-val { flex: 1; }
-.pv-back { background: #fff; border: 1px solid #ddd; position: relative; overflow: hidden;
-    display: flex; flex-direction: column; }
+.pv-back {
+    background: #fff; border: 1px solid rgba(255,255,255,.15);
+    position: relative; overflow: hidden;
+    display: flex; flex-direction: column;
+}
 .pv-back-wm { position: absolute; top:50%;left:50%;transform:translate(-50%,-50%);
     font-size:90px;color:rgba(26,138,60,.06);pointer-events:none; }
 .pv-back-inner { display: flex; flex-direction: column; height: 100%; position: relative; z-index:1; }
@@ -330,6 +366,14 @@ require_once '../../includes/header.php';
 .pv-sig { text-align:center; }
 .pv-sig-line { width:60px;border-top:1px solid #333;margin:0 auto 2px; }
 .pv-addr { line-height:1.6; }
+
+/* card label badges */
+.pv-card-label {
+    position: absolute; bottom: -28px; left: 0; right: 0;
+    text-align: center; font-size: 11px; font-weight: 600;
+    color: rgba(255,255,255,.7); letter-spacing: 1px;
+}
+.pv-card-wrap { position: relative; padding-bottom: 32px; }
 </style>
 
 <?php if ($savedMsg): ?>
@@ -1000,18 +1044,19 @@ require_once '../../includes/header.php';
     <!-- ===== ডান: লাইভ প্রিভিউ ===== -->
     <div class="preview-panel">
         <div class="card">
-            <div class="card-header">
-                <span class="card-title"><i class="fas fa-eye"></i> লাইভ প্রিভিউ</span>
+            <div class="card-header" style="background:linear-gradient(135deg,#1a2a4a,#2d4a7a);border-radius:10px 10px 0 0;border:none;">
+                <span class="card-title" style="color:#fff;"><i class="fas fa-eye"></i> লাইভ প্রিভিউ</span>
                 <div style="display:flex;gap:6px;">
-                    <button type="button" class="btn btn-outline btn-sm" onclick="setPreviewType('student')">ছাত্র</button>
-                    <button type="button" class="btn btn-outline btn-sm" onclick="setPreviewType('teacher')">শিক্ষক</button>
-                    <button type="button" class="btn btn-outline btn-sm" onclick="setPreviewType('staff')">স্টাফ</button>
+                    <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="setPreviewType('student')">ছাত্র</button>
+                    <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="setPreviewType('teacher')">শিক্ষক</button>
+                    <button type="button" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="setPreviewType('staff')">স্টাফ</button>
                 </div>
             </div>
-            <div class="card-body" style="background:#e8edf2;padding:16px;">
+            <div class="card-body" style="padding:0;background:linear-gradient(135deg,#1a2a4a,#2d4a7a,#1a3a3a);border-radius:0 0 10px 10px;">
                 <div class="preview-wrap">
                     <!-- BACK -->
-                    <div class="pv-card pv-back" id="pvBack">
+                    <div class="pv-card-wrap">
+                        <div class="pv-card pv-back" id="pvBack">
                         <div class="pv-back-wm"><i class="fas fa-mosque"></i></div>
                         <div class="pv-back-inner" id="pvBackInner">
                             <div class="pv-back-title" id="pvBackTitle">Terms and Condition</div>
@@ -1035,8 +1080,11 @@ require_once '../../includes/header.php';
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div><!-- /pv-back -->
+                    <div class="pv-card-label">← পেছনে</div>
+                    </div><!-- /pv-card-wrap back -->
                     <!-- FRONT -->
+                    <div class="pv-card-wrap">
                     <div class="pv-card pv-front" id="pvFront">
                         <div class="pv-strip" id="pvStrip">
                             <div class="pv-strip-top" id="pvStripTop"></div>
@@ -1072,11 +1120,11 @@ require_once '../../includes/header.php';
                             <div class="pv-photo-wrap">
                                 <div class="pv-photo-box" id="pvPhotoBox">ক</div>
                             </div>
-                            <div class="pv-name" id="pvName">
+                            <div class="pv-name" id="pvName" style="text-align:center;">
                                 <span class="pv-name-first" id="pvNameFirst">Rakika Rahman</span>
                                 <span class="pv-name-last" id="pvNameLast"> Toha</span>
                             </div>
-                            <div class="pv-id" id="pvId">ID: ANT-2026-NP4X</div>
+                            <div class="pv-id" id="pvId" style="text-align:center;">ID: ANT-2026-NP4X</div>
                             <div class="pv-table" id="pvTable">
                                 <div class="pv-row"><span class="pv-label" id="pvLbl1">Class</span><span class="pv-val" id="pvVal1">:দ্বিতীয় শ্রেণী</span></div>
                                 <div class="pv-row"><span class="pv-label" id="pvLbl2">Roll</span><span class="pv-val" id="pvVal2">:১</span></div>
@@ -1084,10 +1132,13 @@ require_once '../../includes/header.php';
                             </div>
                         </div>
                     </div>
+                    <div class="pv-card-label">সামনে →</div>
+                    </div><!-- /pv-card-wrap front -->
+                </div><!-- /preview-wrap -->
+                <div style="text-align:center;padding:10px 0 14px;font-size:11px;color:rgba(255,255,255,.5);letter-spacing:1px;">
+                    ← পেছনের দিক &nbsp;|&nbsp; সামনের দিক →
                 </div>
-                <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--text-muted);">← পেছন &nbsp;|&nbsp; সামনে →</div>
-            </div>
-        </div>
+            </div><!-- /card-body -->
 
         <!-- PHP কোড স্নিপেট -->
         <div class="card" style="margin-top:16px;">
