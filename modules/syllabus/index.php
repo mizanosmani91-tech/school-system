@@ -4,7 +4,16 @@ requireLogin();
 $pageTitle = 'সিলেবাস ব্যবস্থাপনা';
 $db = getDB();
 
-$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$divisionId = (int)($_GET['division_id'] ?? 0);
+$divisions  = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
 $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
 
 // Ensure syllabus table exists
@@ -28,20 +37,21 @@ $db->exec("CREATE TABLE IF NOT EXISTS syllabus (
 // Save syllabus
 if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_syllabus'])) {
     if (!verifyCsrf($_POST['csrf']??'')) die('CSRF');
-    $classId    = (int)$_POST['class_id'];
-    $subjectId  = (int)$_POST['subject_id'];
-    $chapterNo  = (int)($_POST['chapter_no']??0) ?: null;
-    $chapterBn  = trim($_POST['chapter_name_bn']??'');
-    $chapter    = trim($_POST['chapter_name']??'') ?: $chapterBn;
-    $topics     = trim($_POST['topics']??'');
-    $month      = trim($_POST['month']??'');
-    $year       = date('Y');
+    $classId   = (int)$_POST['class_id'];
+    $subjectId = (int)$_POST['subject_id'];
+    $chapterNo = (int)($_POST['chapter_no']??0) ?: null;
+    $chapterBn = trim($_POST['chapter_name_bn']??'');
+    $chapter   = trim($_POST['chapter_name']??'') ?: $chapterBn;
+    $topics    = trim($_POST['topics']??'');
+    $month     = trim($_POST['month']??'');
+    $year      = date('Y');
+    $divId     = (int)($_POST['division_id'] ?? 0);
 
     $db->prepare("INSERT INTO syllabus (class_id,subject_id,academic_year,chapter_no,chapter_name,chapter_name_bn,topics,month,created_by)
         VALUES (?,?,?,?,?,?,?,?,?)")
        ->execute([$classId,$subjectId,$year,$chapterNo,$chapter,$chapterBn,$topics,$month,$_SESSION['user_id']]);
     setFlash('success','সিলেবাস সংরক্ষিত হয়েছে।');
-    header('Location: index.php?class_id='.$classId.'&subject_id='.$subjectId); exit;
+    header('Location: index.php?division_id='.$divId.'&class_id='.$classId.'&subject_id='.$subjectId); exit;
 }
 
 // Mark complete
@@ -88,19 +98,50 @@ require_once '../../includes/header.php';
     <?php endif; ?>
 </div>
 
+<!-- বিভাগ Quick-Tab -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;" class="no-print">
+    <a href="index.php" class="btn btn-sm <?= !$divisionId ? 'btn-primary' : 'btn-outline' ?>">
+        <i class="fas fa-layer-group"></i> সব বিভাগ
+    </a>
+    <?php foreach($divisions as $dv): ?>
+    <a href="index.php?division_id=<?=$dv['id']?>" class="btn btn-sm <?= $divisionId==$dv['id'] ? 'btn-primary' : 'btn-outline' ?>">
+        <?=e($dv['division_name_bn'])?>
+    </a>
+    <?php endforeach; ?>
+</div>
+
 <!-- Filter -->
 <div class="card mb-16">
     <div class="card-body" style="padding:12px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="sylFilter" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <input type="hidden" name="division_id" id="sylDivId" value="<?=$divisionId?>">
+
+            <!-- বিভাগ -->
+            <div class="form-group" style="margin:0;flex:1;min-width:130px;">
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="onSylDivChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach($divisions as $dv): ?>
+                    <option value="<?=$dv['id']?>" <?=$divisionId==$dv['id']?'selected':''?>><?=e($dv['division_name_bn'])?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <!-- শ্রেণী -->
             <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                 <label style="font-size:12px;">শ্রেণী</label>
                 <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <option value="">শ্রেণী নির্বাচন</option>
                     <?php foreach($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>>
+                        <?php if(!$divisionId): ?><?=e($c['division_name_bn']??'')?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- বিষয় -->
             <div class="form-group" style="margin:0;flex:1;min-width:160px;">
                 <label style="font-size:12px;">বিষয়</label>
                 <select name="subject_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
@@ -116,7 +157,6 @@ require_once '../../includes/header.php';
 </div>
 
 <?php if ($filterClass && $filterSubject && !empty($syllabus)): ?>
-<!-- Progress Bar -->
 <div class="card mb-16">
     <div class="card-body" style="padding:16px 20px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
@@ -135,7 +175,6 @@ require_once '../../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- Syllabus Table -->
 <div class="card">
     <div class="table-wrap">
         <table>
@@ -164,7 +203,7 @@ require_once '../../includes/header.php';
                     <td style="font-size:13px;"><?=e($s['month']??'-')?></td>
                     <td>
                         <?php if(in_array($_SESSION['role_slug'],['super_admin','principal','teacher'])): ?>
-                        <a href="?toggle=<?=$s['id']?>&class_id=<?=$filterClass?>&subject_id=<?=$filterSubject?>"
+                        <a href="?toggle=<?=$s['id']?>&division_id=<?=$divisionId?>&class_id=<?=$filterClass?>&subject_id=<?=$filterSubject?>"
                             class="badge badge-<?=$s['is_completed']?'success':'secondary'?>" style="cursor:pointer;text-decoration:none;font-size:12px;">
                             <?=$s['is_completed']?'✅ সম্পন্ন':'⏳ বাকি'?>
                         </a>
@@ -174,7 +213,7 @@ require_once '../../includes/header.php';
                     </td>
                     <?php if(in_array($_SESSION['role_slug'],['super_admin','principal','teacher'])): ?>
                     <td class="no-print">
-                        <a href="?delete=<?=$s['id']?>&class_id=<?=$filterClass?>&subject_id=<?=$filterSubject?>" onclick="return confirm('মুছবেন?')" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i></a>
+                        <a href="?delete=<?=$s['id']?>&division_id=<?=$divisionId?>&class_id=<?=$filterClass?>&subject_id=<?=$filterSubject?>" onclick="return confirm('মুছবেন?')" class="btn btn-danger btn-xs"><i class="fas fa-trash"></i></a>
                     </td>
                     <?php endif; ?>
                 </tr>
@@ -184,7 +223,6 @@ require_once '../../includes/header.php';
     </div>
 </div>
 
-<!-- Add Modal -->
 <?php if(in_array($_SESSION['role_slug'],['super_admin','principal','teacher'])): ?>
 <div class="modal-overlay" id="addSyllabusModal">
     <div class="modal-box" style="max-width:560px;">
@@ -195,6 +233,7 @@ require_once '../../includes/header.php';
         <form method="POST">
             <input type="hidden" name="csrf" value="<?=getCsrfToken()?>">
             <input type="hidden" name="save_syllabus" value="1">
+            <input type="hidden" name="division_id" value="<?=$divisionId?>">
             <div class="modal-body">
                 <div class="form-grid">
                     <div class="form-group">
@@ -202,7 +241,10 @@ require_once '../../includes/header.php';
                         <select name="class_id" class="form-control" required>
                             <option value="">নির্বাচন করুন</option>
                             <?php foreach($classes as $c): ?>
-                            <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                            <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>>
+                                <?php if(!$divisionId): ?><?=e($c['division_name_bn']??'')?> → <?php endif; ?>
+                                <?=e($c['class_name_bn'])?>
+                            </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -238,7 +280,7 @@ require_once '../../includes/header.php';
                     </div>
                     <div class="form-group" style="grid-column:1/-1;">
                         <label>বিষয়বস্তু / Topics</label>
-                        <textarea name="topics" class="form-control" rows="3" placeholder="এই অধ্যায়ে কী কী পড়ানো হবে (প্রতিটি আলাদা লাইনে লিখুন)"></textarea>
+                        <textarea name="topics" class="form-control" rows="3" placeholder="এই অধ্যায়ে কী কী পড়ানো হবে"></textarea>
                     </div>
                 </div>
             </div>
@@ -250,5 +292,13 @@ require_once '../../includes/header.php';
     </div>
 </div>
 <?php endif; ?>
+
+<script>
+function onSylDivChange(divId) {
+    document.getElementById('sylDivId').value = divId;
+    document.querySelector('select[name="class_id"]').value = '';
+    document.getElementById('sylFilter').submit();
+}
+</script>
 
 <?php require_once '../../includes/footer.php'; ?>
