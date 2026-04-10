@@ -92,7 +92,7 @@ require_once 'includes/header.php';
                     <?php $currentLogo = $settings['logo'] ?? ''; ?>
                     <?php if ($currentLogo): ?>
                     <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1.5px solid var(--border);">
-                        <img src="<?= str_starts_with($currentLogo,'http') ? e($currentLogo) : UPLOAD_URL.e($currentLogo) ?>"
+                        <img src="<?= strpos($currentLogo,'http') === 0 ? e($currentLogo) : UPLOAD_URL.e($currentLogo) ?>"
                              alt="current logo"
                              style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#fff;padding:4px;">
                         <div>
