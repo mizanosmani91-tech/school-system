@@ -323,7 +323,15 @@ if (isset($parentLayout) && $parentLayout) {
 <!-- SIDEBAR -->
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-logo">
+        <?php $logoVal = getSetting('logo',''); ?>
+        <?php if ($logoVal): ?>
+        <div class="sidebar-logo-icon" style="background:transparent;padding:0;overflow:hidden;">
+            <img src="<?= str_starts_with($logoVal,'http') ? e($logoVal) : UPLOAD_URL.e($logoVal) ?>"
+                 alt="logo" style="width:44px;height:44px;object-fit:contain;border-radius:10px;">
+        </div>
+        <?php else: ?>
         <div class="sidebar-logo-icon"><i class="fas fa-mosque"></i></div>
+        <?php endif; ?>
         <div class="sidebar-logo-text">
             <h2><?= e($instituteName) ?></h2>
             <span>ম্যানেজমেন্ট সিস্টেম</span>
