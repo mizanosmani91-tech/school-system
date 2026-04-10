@@ -12,7 +12,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_settings'])) {
         $val = trim($_POST[$k]??'');
         $db->prepare("INSERT INTO settings (setting_key,setting_value) VALUES (?,?) ON DUPLICATE KEY UPDATE setting_value=?")->execute([$k,$val,$val]);
     }
-    // Logo
+    // Logo remove
+    if (!empty($_POST['remove_logo'])) {
+        $db->prepare("DELETE FROM settings WHERE setting_key='logo'")->execute();
+    }
+    // Logo upload
     if (!empty($_FILES['logo']['name'])) {
         $ext = pathinfo($_FILES['logo']['name'],PATHINFO_EXTENSION);
         $logoPath = 'logo.'.$ext;
@@ -81,8 +85,32 @@ require_once 'includes/header.php';
                     <input type="email" name="email" class="form-control" value="<?=e($settings['email']??'')?>"></div>
                 <div class="form-group" style="grid-column:1/-1;"><label>ঠিকানা</label>
                     <textarea name="address" class="form-control" rows="2"><?=e($settings['address']??'')?></textarea></div>
-                <div class="form-group" style="grid-column:1/-1;"><label>প্রতিষ্ঠানের লোগো</label>
-                    <input type="file" name="logo" class="form-control" accept="image/*"></div>
+                <div class="form-group" style="grid-column:1/-1;">
+                    <label>প্রতিষ্ঠানের লোগো</label>
+                    <?php $currentLogo = $settings['logo'] ?? ''; ?>
+                    <?php if ($currentLogo): ?>
+                    <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;padding:12px;background:#f8f9fa;border-radius:8px;border:1.5px solid var(--border);">
+                        <img src="<?= str_starts_with($currentLogo,'http') ? e($currentLogo) : UPLOAD_URL.e($currentLogo) ?>"
+                             alt="current logo"
+                             style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#fff;padding:4px;">
+                        <div>
+                            <div style="font-size:13px;font-weight:600;">বর্তমান লোগো</div>
+                            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;"><?= e($currentLogo) ?></div>
+                            <label style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;color:var(--danger);cursor:pointer;">
+                                <input type="checkbox" name="remove_logo" value="1"> লোগো মুছে ফেলুন
+                            </label>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <input type="file" name="logo" class="form-control" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+                           onchange="previewLogo(this)">
+                    <div id="logoPreviewWrap" style="display:none;margin-top:8px;">
+                        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">নতুন লোগো প্রিভিউ:</div>
+                        <img id="logoPreviewImg" src="" alt="preview"
+                             style="width:60px;height:60px;object-fit:contain;border-radius:8px;border:1px solid var(--border);background:#fff;padding:4px;">
+                    </div>
+                    <small style="color:var(--text-muted);font-size:12px;">PNG, JPG, SVG গ্রহণযোগ্য।</small>
+                </div>
             </div>
             <button type="submit" class="btn btn-primary mt-16"><i class="fas fa-save"></i> সংরক্ষণ করুন</button>
         </form>
@@ -172,4 +200,17 @@ require_once 'includes/header.php';
 </div>
 </div>
 </div>
+<script>
+function previewLogo(input) {
+    const wrap = document.getElementById('logoPreviewWrap');
+    const img  = document.getElementById('logoPreviewImg');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => { img.src = e.target.result; wrap.style.display = 'block'; };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        wrap.style.display = 'none';
+    }
+}
+</script>
 <?php require_once 'includes/footer.php'; ?>
