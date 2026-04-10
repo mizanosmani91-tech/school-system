@@ -4,7 +4,15 @@ requireLogin();
 $pageTitle = 'রুটিন ব্যবস্থাপনা';
 $db = getDB();
 
-$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$divisionId = (int)($_GET['division_id'] ?? 0);
+$divisions  = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
 $subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
 $teachers = $db->query("SELECT * FROM teachers WHERE is_active=1 ORDER BY name_bn")->fetchAll();
 
@@ -36,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['save_timetable'])) {
            ->execute([$classId,$subjectId,$teacherId,$day,$startTime,$endTime,$room,$year]);
         setFlash('success','রুটিন সংরক্ষিত হয়েছে।');
     }
-    header('Location: index.php?class_id='.$classId); exit;
+    header('Location: index.php?division_id='.$divisionId.'&class_id='.$classId); exit;
 }
 
 // Delete
@@ -79,13 +87,26 @@ require_once '../../includes/header.php';
 <!-- Class selector -->
 <div class="card mb-16 no-print">
     <div class="card-body" style="padding:12px 20px;">
-        <form method="GET" style="display:flex;gap:12px;align-items:flex-end;">
+        <form method="GET" id="ttFilter" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <input type="hidden" name="division_id" id="ttDivId" value="<?=$divisionId?>">
+            <div class="form-group" style="margin:0;flex:1;min-width:130px;">
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="document.getElementById('ttDivId').value=this.value;document.querySelector('select[name=class_id]').value='';document.getElementById('ttFilter').submit()">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach($divisions as $dv): ?>
+                    <option value="<?=$dv['id']?>" <?=$divisionId==$dv['id']?'selected':''?>><?=e($dv['division_name_bn'])?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="form-group" style="margin:0;flex:1;max-width:300px;">
                 <label style="font-size:12px;">শ্রেণী নির্বাচন করুন</label>
                 <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <option value="">শ্রেণী নির্বাচন করুন</option>
                     <?php foreach($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$selectedClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                    <option value="<?=$c['id']?>" <?=$selectedClass==$c['id']?'selected':''?>>
+                        <?php if(!$divisionId): ?><?=e($c['division_name_bn']??'')?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
