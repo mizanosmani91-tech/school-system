@@ -13,7 +13,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login_type = $_POST['login_type'] ?? 'admin';
 
     if ($login_type === 'parent' || $login_type === 'student') {
-        // Parent / Student login via Student ID + Secret Code
         $student_id  = trim($_POST['student_id'] ?? '');
         $secret_code = trim($_POST['secret_code'] ?? '');
 
@@ -46,7 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
     } else {
-        // Admin / Teacher login via username + password
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
 
@@ -65,7 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$user['id']]);
                 logActivity($user['id'], 'login', 'auth', 'লগইন সফল');
 
-                // Role অনুযায়ী আলাদা ড্যাশবোর্ডে পাঠানো
                 if ($user['role_slug'] === 'teacher') {
                     header('Location: ' . BASE_URL . '/modules/teacher/dashboard.php');
                 } else {
@@ -82,6 +79,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $instituteName = getSetting('institute_name', APP_NAME);
+$instituteLogo = getSetting('logo', '');
+
+// Build logo URL
+$logoUrl = '';
+if ($instituteLogo) {
+    $logoUrl = str_starts_with($instituteLogo, 'http') ? $instituteLogo : UPLOAD_URL . $instituteLogo;
+}
 ?>
 <!DOCTYPE html>
 <html lang="bn">
@@ -117,9 +121,26 @@ body {
     content: ''; position: absolute; inset: 0;
     background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
-.banner-icon { font-size: 64px; margin-bottom: 20px; color: #f0a500; }
-.banner-title { font-size: 24px; font-weight: 700; margin-bottom: 10px; }
-.banner-sub { font-size: 14px; opacity: .75; margin-bottom: 30px; line-height: 1.6; }
+
+/* ===== LOGO AREA ===== */
+.banner-logo-wrap {
+    width: 90px; height: 90px;
+    background: rgba(255,255,255,.1);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+    border: 2px solid rgba(255,255,255,.15);
+    overflow: hidden;
+}
+.banner-logo-wrap img {
+    width: 100%; height: 100%; object-fit: contain; padding: 8px;
+}
+.banner-logo-wrap .banner-icon {
+    font-size: 48px; color: #f0a500; margin: 0;
+}
+
+.banner-title { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+.banner-sub { font-size: 13px; opacity: .75; margin-bottom: 30px; line-height: 1.6; }
 .banner-features { list-style: none; text-align: left; }
 .banner-features li { padding: 6px 0; font-size: 13px; display: flex; align-items: center; gap: 10px; opacity: .85; }
 .banner-features i { color: #f0a500; }
@@ -158,8 +179,6 @@ body {
     transition: all .2s;
 }
 .portal-tab.active { border-color: #1a5276; background: #ebf5fb; color: #1a5276; font-weight: 700; }
-
-/* Staff Kiosk Button */
 .kiosk-divider { display:flex; align-items:center; gap:10px; margin: 22px 0 18px; }
 .kiosk-divider::before, .kiosk-divider::after { content:''; flex:1; height:1px; background:#e2e8f0; }
 .kiosk-divider span { font-size:12px; color:#a0aec0; white-space:nowrap; }
@@ -178,15 +197,12 @@ body {
     background: rgba(255,255,255,.2); border-radius: 5px;
     padding: 2px 8px; font-size: 11px; font-weight: 600;
 }
-
-/* hint box for student/parent login */
 .hint-box {
     background: #f0f9ff; border: 1px solid #bee3f8; border-radius: 8px;
     padding: 10px 14px; font-size: 12px; color: #2c5282; margin-bottom: 16px;
     line-height: 1.7;
 }
 .hint-box i { margin-right: 5px; }
-
 @media (max-width: 700px) {
     .login-container { grid-template-columns: 1fr; }
     .login-banner { display: none; }
@@ -198,7 +214,13 @@ body {
 <div class="login-container">
     <!-- Banner -->
     <div class="login-banner">
-        <i class="fas fa-mosque banner-icon"></i>
+        <div class="banner-logo-wrap">
+            <?php if ($logoUrl): ?>
+                <img src="<?= e($logoUrl) ?>" alt="<?= e($instituteName) ?>">
+            <?php else: ?>
+                <i class="fas fa-mosque banner-icon"></i>
+            <?php endif; ?>
+        </div>
         <h2 class="banner-title"><?= e($instituteName) ?></h2>
         <p class="banner-sub">ডিজিটাল শিক্ষা ব্যবস্থাপনা সিস্টেম<br>সকলের জন্য সহজ ও আধুনিক</p>
         <ul class="banner-features">
@@ -218,33 +240,24 @@ body {
             <p>আপনার অ্যাকাউন্টে প্রবেশ করুন</p>
         </div>
 
-        <!-- Tabs -->
         <div class="portal-tabs">
-            <div class="portal-tab active" id="tab-admin"   onclick="setPortal('admin')">
-                <i class="fas fa-user-shield"></i> অ্যাডমিন/শিক্ষক
-            </div>
-            <div class="portal-tab" id="tab-parent"  onclick="setPortal('parent')">
-                <i class="fas fa-users"></i> অভিভাবক
-            </div>
-            <div class="portal-tab" id="tab-student" onclick="setPortal('student')">
-                <i class="fas fa-user-graduate"></i> ছাত্র
-            </div>
+            <div class="portal-tab active" id="tab-admin"   onclick="setPortal('admin')"><i class="fas fa-user-shield"></i> অ্যাডমিন/শিক্ষক</div>
+            <div class="portal-tab" id="tab-parent"  onclick="setPortal('parent')"><i class="fas fa-users"></i> অভিভাবক</div>
+            <div class="portal-tab" id="tab-student" onclick="setPortal('student')"><i class="fas fa-user-graduate"></i> ছাত্র</div>
         </div>
 
         <?php if ($error): ?>
         <div class="error-box"><i class="fas fa-exclamation-circle"></i> <?= e($error) ?></div>
         <?php endif; ?>
 
-        <!-- ===== Admin / Teacher form ===== -->
-        <form method="POST" action="" id="form-admin">
+        <form method="POST" id="form-admin">
             <input type="hidden" name="login_type" value="admin">
             <p class="form-title">লগইন করুন</p>
             <div class="form-group">
                 <label>ব্যবহারকারীর নাম / ফোন নম্বর</label>
                 <div class="input-wrap">
                     <i class="fas fa-user"></i>
-                    <input type="text" name="username" placeholder="username বা 01XXXXXXXXX"
-                           value="<?= e($_POST['username'] ?? '') ?>" required>
+                    <input type="text" name="username" placeholder="username বা 01XXXXXXXXX" value="<?= e($_POST['username'] ?? '') ?>" required>
                 </div>
             </div>
             <div class="form-group">
@@ -254,67 +267,37 @@ body {
                     <input type="password" name="password" placeholder="••••••••" required>
                 </div>
             </div>
-            <button type="submit" class="btn-login">
-                <i class="fas fa-sign-in-alt"></i> প্রবেশ করুন
-            </button>
+            <button type="submit" class="btn-login"><i class="fas fa-sign-in-alt"></i> প্রবেশ করুন</button>
         </form>
 
-        <!-- ===== Parent form ===== -->
-        <form method="POST" action="" id="form-parent" style="display:none;">
+        <form method="POST" id="form-parent" style="display:none;">
             <input type="hidden" name="login_type" value="parent">
             <p class="form-title">অভিভাবক লগইন</p>
-            <div class="hint-box">
-                <i class="fas fa-info-circle"></i>
-                ভর্তির সময় দেওয়া <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করুন।
-                (Admission Slip-এ পাবেন)
-            </div>
+            <div class="hint-box"><i class="fas fa-info-circle"></i> ভর্তির সময় দেওয়া <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করুন।</div>
             <div class="form-group">
                 <label>Student ID</label>
-                <div class="input-wrap">
-                    <i class="fas fa-id-card"></i>
-                    <input type="text" name="student_id" placeholder="ANT-2025-XXXX"
-                           value="<?= e($_POST['student_id'] ?? '') ?>" required>
-                </div>
+                <div class="input-wrap"><i class="fas fa-id-card"></i><input type="text" name="student_id" placeholder="ANT-2025-XXXX" required></div>
             </div>
             <div class="form-group">
                 <label>Secret Code</label>
-                <div class="input-wrap">
-                    <i class="fas fa-key"></i>
-                    <input type="password" name="secret_code" placeholder="••••••" required>
-                </div>
+                <div class="input-wrap"><i class="fas fa-key"></i><input type="password" name="secret_code" placeholder="••••••" required></div>
             </div>
-            <button type="submit" class="btn-login">
-                <i class="fas fa-sign-in-alt"></i> প্রবেশ করুন
-            </button>
+            <button type="submit" class="btn-login"><i class="fas fa-sign-in-alt"></i> প্রবেশ করুন</button>
         </form>
 
-        <!-- ===== Student form ===== -->
-        <form method="POST" action="" id="form-student" style="display:none;">
+        <form method="POST" id="form-student" style="display:none;">
             <input type="hidden" name="login_type" value="student">
             <p class="form-title">ছাত্র লগইন</p>
-            <div class="hint-box">
-                <i class="fas fa-info-circle"></i>
-                তোমার <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করো।
-                (Admission Slip-এ পাবে)
-            </div>
+            <div class="hint-box"><i class="fas fa-info-circle"></i> তোমার <strong>Student ID</strong> ও <strong>Secret Code</strong> দিয়ে লগইন করো।</div>
             <div class="form-group">
                 <label>Student ID</label>
-                <div class="input-wrap">
-                    <i class="fas fa-id-card"></i>
-                    <input type="text" name="student_id" placeholder="ANT-2025-XXXX"
-                           value="<?= e($_POST['student_id'] ?? '') ?>" required>
-                </div>
+                <div class="input-wrap"><i class="fas fa-id-card"></i><input type="text" name="student_id" placeholder="ANT-2025-XXXX" required></div>
             </div>
             <div class="form-group">
                 <label>Secret Code</label>
-                <div class="input-wrap">
-                    <i class="fas fa-key"></i>
-                    <input type="password" name="secret_code" placeholder="••••••" required>
-                </div>
+                <div class="input-wrap"><i class="fas fa-key"></i><input type="password" name="secret_code" placeholder="••••••" required></div>
             </div>
-            <button type="submit" class="btn-login">
-                <i class="fas fa-sign-in-alt"></i> প্রবেশ করুন
-            </button>
+            <button type="submit" class="btn-login"><i class="fas fa-sign-in-alt"></i> প্রবেশ করুন</button>
         </form>
 
         <div class="login-links">
@@ -325,7 +308,6 @@ body {
             </p>
         </div>
 
-        <!-- Staff Attendance Kiosk -->
         <div class="kiosk-divider"><span>অথবা</span></div>
         <a href="staff_attendance.php" class="btn-kiosk">
             <i class="fas fa-fingerprint" style="font-size:18px;"></i>
@@ -336,18 +318,13 @@ body {
 </div>
 
 <script>
-// On page load — restore active tab if POST returned error
 (function () {
     const lt = <?= json_encode($_POST['login_type'] ?? 'admin') ?>;
     if (lt && lt !== 'admin') setPortal(lt);
 })();
-
 function setPortal(type) {
-    // tabs
     document.querySelectorAll('.portal-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-' + type).classList.add('active');
-
-    // forms
     ['admin','parent','student'].forEach(f => {
         document.getElementById('form-' + f).style.display = (f === type) ? 'block' : 'none';
     });
