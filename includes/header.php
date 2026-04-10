@@ -327,7 +327,7 @@ if (isset($parentLayout) && $parentLayout) {
     <div class="sidebar-logo">
         <div class="sidebar-logo-icon">
             <?php if ($instituteLogo): ?>
-                <img src="<?= str_starts_with($instituteLogo,'http') ? e($instituteLogo) : UPLOAD_URL.e($instituteLogo) ?>"
+                <img src="<?= strpos($instituteLogo,'http') === 0 ? e($instituteLogo) : UPLOAD_URL.e($instituteLogo) ?>"
                      alt="<?= e($instituteName) ?>">
             <?php else: ?>
                 <i class="fas fa-mosque"></i>
