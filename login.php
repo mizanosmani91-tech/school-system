@@ -84,7 +84,7 @@ $instituteLogo = getSetting('logo', '');
 // Build logo URL
 $logoUrl = '';
 if ($instituteLogo) {
-    $logoUrl = str_starts_with($instituteLogo, 'http') ? $instituteLogo : UPLOAD_URL . $instituteLogo;
+    $logoUrl = strpos($instituteLogo, 'http') === 0 ? $instituteLogo : UPLOAD_URL . $instituteLogo;
 }
 ?>
 <!DOCTYPE html>
