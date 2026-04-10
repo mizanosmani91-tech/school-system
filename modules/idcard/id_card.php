@@ -4,12 +4,24 @@ requireLogin(['super_admin','principal']);
 $pageTitle = 'আইডি কার্ড জেনারেটর';
 $db = getDB();
 
-$classes  = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
+$divisionId  = (int)($_GET['division_id'] ?? 0);
 $filterClass = (int)($_GET['class_id'] ?? 0);
 $filterIds   = $_GET['ids'] ?? ''; // comma separated ids
 $design      = $_GET['design'] ?? 'modern';
 $type        = $_GET['type'] ?? 'student'; // student, teacher, staff
 $printMode   = isset($_GET['print']);
+
+// সব বিভাগ
+$divisions = $db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+
+// শ্রেণী — বিভাগ অনুযায়ী
+if ($divisionId) {
+    $clsStmt = $db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    $clsStmt->execute([$divisionId]);
+    $classes = $clsStmt->fetchAll();
+} else {
+    $classes = $db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
 
 // ===== ডেটা লোড (ধরন অনুযায়ী) =====
 $students = []; // সব ধরনের কার্ডই এই array তে থাকবে
@@ -55,22 +67,34 @@ if ($type === 'teacher') {
     if ($filterIds) {
         $ids = array_map('intval', explode(',', $filterIds));
         $placeholders = implode(',', array_fill(0, count($ids), '?'));
-        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
+        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name, d.division_name_bn
             FROM students s
             LEFT JOIN classes c ON s.class_id = c.id
             LEFT JOIN sections sec ON s.section_id = sec.id
+            LEFT JOIN divisions d ON s.division_id = d.id
             WHERE s.id IN ($placeholders) AND s.status='active'
             ORDER BY s.roll_number");
         $stmt->execute($ids);
         $students = $stmt->fetchAll();
     } elseif ($filterClass) {
-        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name
+        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name, d.division_name_bn
             FROM students s
             LEFT JOIN classes c ON s.class_id = c.id
             LEFT JOIN sections sec ON s.section_id = sec.id
+            LEFT JOIN divisions d ON s.division_id = d.id
             WHERE s.class_id=? AND s.status='active'
             ORDER BY s.roll_number");
         $stmt->execute([$filterClass]);
+        $students = $stmt->fetchAll();
+    } elseif ($divisionId) {
+        $stmt = $db->prepare("SELECT s.*, c.class_name_bn, c.class_name, sec.section_name, d.division_name_bn
+            FROM students s
+            LEFT JOIN classes c ON s.class_id = c.id
+            LEFT JOIN sections sec ON s.section_id = sec.id
+            LEFT JOIN divisions d ON s.division_id = d.id
+            WHERE s.division_id=? AND s.status='active'
+            ORDER BY c.class_numeric, s.roll_number");
+        $stmt->execute([$divisionId]);
         $students = $stmt->fetchAll();
     }
 }
@@ -158,13 +182,26 @@ require_once '../../includes/header.php';
                         <option value="staff"   <?= $type==='staff'  ?'selected':'' ?>>স্টাফ</option>
                     </select>
                 </div>
+                <!-- বিভাগ (শুধু ছাত্রের জন্য) -->
+                <div class="form-group" style="margin:0;flex:1;min-width:140px;" id="divisionDiv" <?= $type!=='student'?'style="display:none;"':'' ?>>
+                    <label style="font-size:12px;">বিভাগ</label>
+                    <select name="division_id" class="form-control" style="padding:8px;" onchange="onDivisionChange(this.value)">
+                        <option value="">সব বিভাগ</option>
+                        <?php foreach($divisions as $d): ?>
+                        <option value="<?= $d['id'] ?>" <?= $divisionId==$d['id']?'selected':'' ?>><?= e($d['division_name_bn']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <!-- শ্রেণী (শুধু ছাত্রের জন্য) -->
                 <div class="form-group" style="margin:0;flex:1;min-width:160px;" id="classDiv" <?= $type!=='student'?'style="display:none;"':'' ?>>
                     <label style="font-size:12px;">শ্রেণী</label>
                     <select name="class_id" class="form-control" style="padding:8px;" onchange="this.form.submit()">
                         <option value="">সব শ্রেণী</option>
                         <?php foreach($classes as $c): ?>
-                        <option value="<?= $c['id'] ?>" <?= $filterClass==$c['id']?'selected':'' ?>><?= e($c['class_name_bn']) ?></option>
+                        <option value="<?= $c['id'] ?>" <?= $filterClass==$c['id']?'selected':'' ?>>
+                            <?php if (!$divisionId): ?><?= e($c['division_name_bn'] ?? '') ?> → <?php endif; ?>
+                            <?= e($c['class_name_bn']) ?>
+                        </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -615,13 +652,23 @@ require_once '../../includes/header.php';
 <script>
 function onTypeChange(sel) {
     var classDiv = document.getElementById('classDiv');
-    if (classDiv) {
-        classDiv.style.display = sel.value === 'student' ? '' : 'none';
-    }
-    // class_id রিসেট করে ফর্ম সাবমিট
+    var divisionDiv = document.getElementById('divisionDiv');
+    if (classDiv) classDiv.style.display = sel.value === 'student' ? '' : 'none';
+    if (divisionDiv) divisionDiv.style.display = sel.value === 'student' ? '' : 'none';
     var classSelect = document.querySelector('select[name="class_id"]');
     if (classSelect) classSelect.value = '';
+    var divSelect = document.querySelector('select[name="division_id"]');
+    if (divSelect) divSelect.value = '';
     sel.form.submit();
+}
+function onDivisionChange(divId) {
+    var classSelect = document.querySelector('select[name="class_id"]');
+    if (classSelect) classSelect.value = '';
+    var params = new URLSearchParams(window.location.search);
+    if (divId) { params.set('division_id', divId); } else { params.delete('division_id'); }
+    params.delete('class_id');
+    params.delete('ids');
+    window.location.href = '?' + params.toString();
 }
 function selectAll() {
     document.querySelectorAll('.student-check').forEach(function(c){ c.checked = true; });
