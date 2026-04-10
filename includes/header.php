@@ -51,7 +51,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .sidebar-logo-icon {
     width: 44px; height: 44px; background: var(--accent);
     border-radius: 10px; display: flex; align-items: center; justify-content: center;
-    font-size: 22px; color: #fff; flex-shrink: 0;
+    font-size: 22px; color: #fff; flex-shrink: 0; overflow: hidden;
+}
+.sidebar-logo-icon img {
+    width: 100%; height: 100%; object-fit: contain; padding: 4px;
 }
 .sidebar-logo-text h2 { color: #fff; font-size: 13px; font-weight: 700; line-height: 1.3; }
 .sidebar-logo-text span { color: var(--sidebar-text); font-size: 11px; }
@@ -312,18 +315,24 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 startSession();
 $currentUser = getCurrentUser();
 $instituteName = getSetting('institute_name', 'স্কুল ম্যানেজমেন্ট সিস্টেম');
+$instituteLogo = getSetting('logo', '');
 $roleSlug = $_SESSION['role_slug'] ?? '';
 
-// Parent portal এর জন্য আলাদা লেআউট
 if (isset($parentLayout) && $parentLayout) {
-    // Parent layout is separate
     return;
 }
 ?>
 <!-- SIDEBAR -->
 <nav class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-        <div class="sidebar-logo-icon"><i class="fas fa-mosque"></i></div>
+        <div class="sidebar-logo-icon">
+            <?php if ($instituteLogo): ?>
+                <img src="<?= str_starts_with($instituteLogo,'http') ? e($instituteLogo) : UPLOAD_URL.e($instituteLogo) ?>"
+                     alt="<?= e($instituteName) ?>">
+            <?php else: ?>
+                <i class="fas fa-mosque"></i>
+            <?php endif; ?>
+        </div>
         <div class="sidebar-logo-text">
             <h2><?= e($instituteName) ?></h2>
             <span>ম্যানেজমেন্ট সিস্টেম</span>
@@ -331,7 +340,6 @@ if (isset($parentLayout) && $parentLayout) {
     </div>
     <nav class="sidebar-nav">
 
-        <!-- ড্যাশবোর্ড -->
         <?php if ($roleSlug === 'teacher'): ?>
         <a href="<?= BASE_URL ?>/modules/teacher/dashboard.php" class="nav-item <?= basename($_SERVER['PHP_SELF'])=='dashboard.php'?'active':'' ?>">
             <i class="fas fa-chart-line"></i> ড্যাশবোর্ড
@@ -344,34 +352,22 @@ if (isset($parentLayout) && $parentLayout) {
 
         <?php if (in_array($roleSlug, ['super_admin','principal','teacher','accountant'])): ?>
 
-        <!-- ছাত্র বিভাগ -->
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('students')">
                 <span><i class="fas fa-user-graduate"></i> ছাত্র</span>
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-students"></i>
             </div>
             <div class="nav-group-items" id="group-students">
-                <a href="<?= BASE_URL ?>/modules/student/list.php" class="nav-item nav-sub">
-                    <i class="fas fa-list"></i> ছাত্র তালিকা
-                </a>
-                <a href="<?= BASE_URL ?>/modules/student/admission.php" class="nav-item nav-sub">
-                    <i class="fas fa-user-plus"></i> নতুন ভর্তি
-                </a>
+                <a href="<?= BASE_URL ?>/modules/student/list.php" class="nav-item nav-sub"><i class="fas fa-list"></i> ছাত্র তালিকা</a>
+                <a href="<?= BASE_URL ?>/modules/student/admission.php" class="nav-item nav-sub"><i class="fas fa-user-plus"></i> নতুন ভর্তি</a>
                 <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-                <a href="<?= BASE_URL ?>/modules/student/classes.php" class="nav-item nav-sub">
-                    <i class="fas fa-school"></i> শ্রেণী ও বিভাগ
-                </a>
+                <a href="<?= BASE_URL ?>/modules/student/classes.php" class="nav-item nav-sub"><i class="fas fa-school"></i> শ্রেণী ও বিভাগ</a>
                 <?php endif; ?>
-                <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item nav-sub">
-                    <i class="fas fa-file-excel"></i> বাল্ক ভর্তি
-                </a>
-                <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='index.php' && strpos($_SERVER['PHP_SELF'],'attendance')!==false ?'active':'' ?>">
-                    <i class="fas fa-clipboard-check"></i> ছাত্র উপস্থিতি
-                </a>
+                <a href="<?= BASE_URL ?>/modules/student/bulk_import.php" class="nav-item nav-sub"><i class="fas fa-file-excel"></i> বাল্ক ভর্তি</a>
+                <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item nav-sub"><i class="fas fa-clipboard-check"></i> ছাত্র উপস্থিতি</a>
             </div>
         </div>
 
-        <!-- শিক্ষক ও স্টাফ -->
         <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('teachers')">
@@ -379,70 +375,44 @@ if (isset($parentLayout) && $parentLayout) {
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-teachers"></i>
             </div>
             <div class="nav-group-items" id="group-teachers">
-                <a href="<?= BASE_URL ?>/modules/teacher/list.php" class="nav-item nav-sub">
-                    <i class="fas fa-users"></i> শিক্ষক তালিকা
-                </a>
-                <a href="<?= BASE_URL ?>/modules/attendance/live_monitor.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='live_monitor.php'?'active':'' ?>">
-                    <i class="fas fa-circle" style="color:#ff4757;font-size:8px;animation:pulse2 1.5s infinite;"></i> লাইভ ক্লাস মনিটর
-                </a>
-                <a href="<?= BASE_URL ?>/attendance_report.php" class="nav-item nav-sub <?= basename($_SERVER['PHP_SELF'])=='attendance_report.php'?'active':'' ?>">
-                    <i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট
-                </a>
+                <a href="<?= BASE_URL ?>/modules/teacher/list.php" class="nav-item nav-sub"><i class="fas fa-users"></i> শিক্ষক তালিকা</a>
+                <a href="<?= BASE_URL ?>/modules/attendance/live_monitor.php" class="nav-item nav-sub"><i class="fas fa-circle" style="color:#ff4757;font-size:8px;animation:pulse2 1.5s infinite;"></i> লাইভ ক্লাস মনিটর</a>
+                <a href="<?= BASE_URL ?>/attendance_report.php" class="nav-item nav-sub"><i class="fas fa-clipboard-list"></i> উপস্থিতি রিপোর্ট</a>
             </div>
         </div>
         <?php endif; ?>
 
-        <!-- আইডি কার্ড -->
         <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-        <a href="<?= BASE_URL ?>/modules/idcard/id_card.php" class="nav-item <?= strpos($_SERVER['PHP_SELF'],'idcard')!==false?'active':'' ?>">
-            <i class="fas fa-id-card"></i> আইডি কার্ড জেনারেট
-        </a>
+        <a href="<?= BASE_URL ?>/modules/idcard/id_card.php" class="nav-item"><i class="fas fa-id-card"></i> আইডি কার্ড জেনারেট</a>
         <?php endif; ?>
 
-        <!-- একাডেমিক -->
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('academic')">
                 <span><i class="fas fa-graduation-cap"></i> একাডেমিক</span>
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-academic"></i>
             </div>
             <div class="nav-group-items" id="group-academic">
-                <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল
-                </a>
-                <a href="<?= BASE_URL ?>/modules/exam/result_entry.php" class="nav-item nav-sub">
-                    <i class="fas fa-pen"></i> মার্ক এন্ট্রি
-                </a>
-                <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item nav-sub">
-                    <i class="fas fa-question-circle"></i> মডেল টেস্ট / MCQ
-                </a>
+                <a href="<?= BASE_URL ?>/modules/exam/index.php" class="nav-item nav-sub"><i class="fas fa-file-alt"></i> পরীক্ষা ও ফলাফল</a>
+                <a href="<?= BASE_URL ?>/modules/exam/result_entry.php" class="nav-item nav-sub"><i class="fas fa-pen"></i> মার্ক এন্ট্রি</a>
+                <a href="<?= BASE_URL ?>/modules/exam/model_test.php" class="nav-item nav-sub"><i class="fas fa-question-circle"></i> মডেল টেস্ট / MCQ</a>
                 <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-                <a href="<?= BASE_URL ?>/modules/exam/subjects.php" class="nav-item nav-sub">
-                    <i class="fas fa-book"></i> বিষয়সমূহ
-                </a>
+                <a href="<?= BASE_URL ?>/modules/exam/subjects.php" class="nav-item nav-sub"><i class="fas fa-book"></i> বিষয়সমূহ</a>
                 <?php endif; ?>
             </div>
         </div>
 
-        <!-- ক্লাস ম্যানেজমেন্ট -->
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('classmanage')">
                 <span><i class="fas fa-book-open"></i> ক্লাস ম্যানেজমেন্ট</span>
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-classmanage"></i>
             </div>
             <div class="nav-group-items" id="group-classmanage">
-                <a href="<?= BASE_URL ?>/modules/teacher/diary.php" class="nav-item nav-sub">
-                    <i class="fas fa-book-open"></i> ক্লাস ডাইরি
-                </a>
-                <a href="<?= BASE_URL ?>/modules/syllabus/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-list-alt"></i> সিলেবাস
-                </a>
-                <a href="<?= BASE_URL ?>/modules/timetable/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-calendar-alt"></i> ক্লাস রুটিন
-                </a>
+                <a href="<?= BASE_URL ?>/modules/teacher/diary.php" class="nav-item nav-sub"><i class="fas fa-book-open"></i> ক্লাস ডাইরি</a>
+                <a href="<?= BASE_URL ?>/modules/syllabus/index.php" class="nav-item nav-sub"><i class="fas fa-list-alt"></i> সিলেবাস</a>
+                <a href="<?= BASE_URL ?>/modules/timetable/index.php" class="nav-item nav-sub"><i class="fas fa-calendar-alt"></i> ক্লাস রুটিন</a>
             </div>
         </div>
 
-        <!-- আর্থিক -->
         <?php if (in_array($roleSlug, ['super_admin','principal','accountant'])): ?>
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('finance')">
@@ -450,74 +420,50 @@ if (isset($parentLayout) && $parentLayout) {
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-finance"></i>
             </div>
             <div class="nav-group-items" id="group-finance">
-                <a href="<?= BASE_URL ?>/modules/fees/collection.php" class="nav-item nav-sub">
-                    <i class="fas fa-hand-holding-usd"></i> ফি সংগ্রহ
-                </a>
-                <a href="<?= BASE_URL ?>/modules/fees/due.php" class="nav-item nav-sub">
-                    <i class="fas fa-exclamation-circle"></i> বকেয়া ফি
-                </a>
-                <a href="<?= BASE_URL ?>/modules/fees/fee_types.php" class="nav-item nav-sub">
-                    <i class="fas fa-tags"></i> ফী ধরন ম্যানেজ
-                </a>
-                <a href="<?= BASE_URL ?>/modules/fees/report.php" class="nav-item nav-sub">
-                    <i class="fas fa-chart-bar"></i> আর্থিক রিপোর্ট
-                </a>
+                <a href="<?= BASE_URL ?>/modules/fees/collection.php" class="nav-item nav-sub"><i class="fas fa-hand-holding-usd"></i> ফি সংগ্রহ</a>
+                <a href="<?= BASE_URL ?>/modules/fees/due.php" class="nav-item nav-sub"><i class="fas fa-exclamation-circle"></i> বকেয়া ফি</a>
+                <a href="<?= BASE_URL ?>/modules/fees/fee_types.php" class="nav-item nav-sub"><i class="fas fa-tags"></i> ফী ধরন ম্যানেজ</a>
+                <a href="<?= BASE_URL ?>/modules/fees/report.php" class="nav-item nav-sub"><i class="fas fa-chart-bar"></i> আর্থিক রিপোর্ট</a>
             </div>
         </div>
         <?php endif; ?>
 
-        <!-- বিজ্ঞপ্তি ও যোগাযোগ -->
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('comms')">
                 <span><i class="fas fa-bullhorn"></i> বিজ্ঞপ্তি ও যোগাযোগ</span>
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-comms"></i>
             </div>
             <div class="nav-group-items" id="group-comms">
-                <a href="<?= BASE_URL ?>/modules/notice/index.php" class="nav-item nav-sub">
-                    <i class="fas fa-bullhorn"></i> নোটিশ বোর্ড
-                </a>
+                <a href="<?= BASE_URL ?>/modules/notice/index.php" class="nav-item nav-sub"><i class="fas fa-bullhorn"></i> নোটিশ বোর্ড</a>
                 <a href="<?= BASE_URL ?>/modules/parent/messages.php" class="nav-item nav-sub">
                     <i class="fas fa-comments"></i> অভিভাবক বার্তা
-                    <?php
-                    try {
-                        $db = getDB();
-                        $unread = $db->query("SELECT COUNT(*) FROM parent_messages WHERE status='unread'")->fetchColumn();
-                        if ($unread > 0) echo '<span class="nav-badge">' . $unread . '</span>';
-                    } catch(Exception $e){}
-                    ?>
+                    <?php try { $db=getDB(); $unread=$db->query("SELECT COUNT(*) FROM parent_messages WHERE status='unread'")->fetchColumn(); if($unread>0) echo '<span class="nav-badge">'.$unread.'</span>'; } catch(Exception $e){} ?>
                 </a>
                 <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-                <a href="<?= BASE_URL ?>/modules/notice/holidays.php" class="nav-item nav-sub">
-                    <i class="fas fa-calendar-times"></i> ছুটির তালিকা
-                </a>
+                <a href="<?= BASE_URL ?>/modules/notice/holidays.php" class="nav-item nav-sub"><i class="fas fa-calendar-times"></i> ছুটির তালিকা</a>
                 <?php endif; ?>
             </div>
         </div>
 
         <?php endif; ?>
 
-        <!-- AI ও সিস্টেম -->
         <div class="nav-group">
             <div class="nav-group-header" onclick="toggleGroup('system')">
                 <span><i class="fas fa-cog"></i> সিস্টেম</span>
                 <i class="fas fa-chevron-down nav-arrow" id="arrow-system"></i>
             </div>
             <div class="nav-group-items" id="group-system">
-                <a href="<?= BASE_URL ?>/modules/ai/assistant.php" class="nav-item nav-sub">
-                    <i class="fas fa-robot"></i> AI সহকারী
-                </a>
+                <a href="<?= BASE_URL ?>/modules/ai/assistant.php" class="nav-item nav-sub"><i class="fas fa-robot"></i> AI সহকারী</a>
                 <?php if (in_array($roleSlug, ['super_admin','principal'])): ?>
-                <a href="<?= BASE_URL ?>/settings.php" class="nav-item nav-sub">
-                    <i class="fas fa-sliders-h"></i> সেটিংস
-                </a>
+                <a href="<?= BASE_URL ?>/settings.php" class="nav-item nav-sub"><i class="fas fa-sliders-h"></i> সেটিংস</a>
                 <?php endif; ?>
             </div>
         </div>
 
     </nav>
 
-    <div style="padding: 16px; border-top: 1px solid rgba(255,255,255,.08);">
-        <div style="background: rgba(255,255,255,.07); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; gap: 10px;">
+    <div style="padding:16px;border-top:1px solid rgba(255,255,255,.08);">
+        <div style="background:rgba(255,255,255,.07);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;">
                 <?= strtoupper(mb_substr($currentUser['name'] ?? 'A', 0, 1)) ?>
             </div>
@@ -539,7 +485,6 @@ function toggleGroup(id) {
     if (arrow) arrow.classList.toggle('open', !isOpen);
     try { localStorage.setItem('nav_' + id, !isOpen ? '1' : '0'); } catch(e){}
 }
-
 document.addEventListener('DOMContentLoaded', function() {
     const groups = ['students','teachers','academic','classmanage','finance','comms','system'];
     const currentPath = window.location.pathname;
@@ -547,18 +492,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const items = document.getElementById('group-' + id);
         const arrow = document.getElementById('arrow-' + id);
         if (!items) return;
-        // active link চেক
         let hasActive = false;
         items.querySelectorAll('a').forEach(a => {
             try {
                 const aPath = new URL(a.href).pathname;
                 if (currentPath === aPath || currentPath.startsWith(aPath.replace('/index.php','')+'/')) {
-                    a.classList.add('active');
-                    hasActive = true;
+                    a.classList.add('active'); hasActive = true;
                 }
             } catch(e){}
         });
-        // localStorage বা active
         let saved = '0';
         try { saved = localStorage.getItem('nav_' + id) || '0'; } catch(e){}
         if (hasActive || saved === '1') {
@@ -566,6 +508,18 @@ document.addEventListener('DOMContentLoaded', function() {
             if (arrow) arrow.classList.add('open');
         }
     });
+});
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+}
+function toggleUserMenu() {
+    document.getElementById('userMenu').classList.toggle('show');
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.user-dropdown')) {
+        const m = document.getElementById('userMenu');
+        if (m) m.classList.remove('show');
+    }
 });
 </script>
 
@@ -579,8 +533,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="topbar-right">
             <div style="font-size:13px;color:var(--text-muted);"><?= banglaDate() ?></div>
             <a href="<?= BASE_URL ?>/modules/notice/index.php" class="topbar-btn">
-                <i class="fas fa-bell"></i>
-                <span class="notif-dot"></span>
+                <i class="fas fa-bell"></i><span class="notif-dot"></span>
             </a>
             <div class="user-dropdown">
                 <div class="user-avatar" onclick="toggleUserMenu()"><?= strtoupper(mb_substr($currentUser['name'] ?? 'A', 0, 1)) ?></div>
@@ -598,9 +551,6 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </header>
     <div class="content">
-<?php
-$flash = getFlash();
-if ($flash):
-?>
+<?php $flash = getFlash(); if ($flash): ?>
 <div class="alert alert-<?= $flash['type'] ?>"><i class="fas fa-info-circle"></i> <?= e($flash['msg']) ?></div>
 <?php endif; ?>
