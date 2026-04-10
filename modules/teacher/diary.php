@@ -11,8 +11,16 @@ $teacher = $db->prepare("SELECT * FROM teachers WHERE user_id=?");
 $teacher->execute([$userId]);
 $teacher = $teacher->fetch();
 
-$classes = $db->query("SELECT * FROM classes WHERE is_active=1 ORDER BY class_numeric")->fetchAll();
-$subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
+$divisionId = (int)(\$_GET['division_id'] ?? 0);
+\$divisions  = \$db->query("SELECT * FROM divisions WHERE is_active=1 ORDER BY sort_order, id")->fetchAll();
+if (\$divisionId) {
+    \$clsStmt = \$db->prepare("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 AND c.division_id=? ORDER BY c.class_numeric");
+    \$clsStmt->execute([\$divisionId]);
+    \$classes = \$clsStmt->fetchAll();
+} else {
+    \$classes = \$db->query("SELECT c.*, d.division_name_bn FROM classes c LEFT JOIN divisions d ON c.division_id=d.id WHERE c.is_active=1 ORDER BY d.sort_order, c.class_numeric")->fetchAll();
+}
+\$subjects = $db->query("SELECT * FROM subjects WHERE is_active=1 ORDER BY subject_name_bn")->fetchAll();
 
 // Ensure diary table exists
 $db->exec("CREATE TABLE IF NOT EXISTS class_diary (
@@ -118,6 +126,7 @@ $perPage = 15;
 $offset = ($page-1)*$perPage;
 
 $where = ['1=1']; $params = [];
+if ($divisionId)    { $where[] = 'c.division_id=?'; $params[] = $divisionId; }
 if ($filterClass)   { $where[] = 'cd.class_id=?';   $params[] = $filterClass; }
 if ($filterDate)    { $where[] = 'cd.diary_date=?';        $params[] = $filterDate; }
 if ($filterTeacher) { $where[] = 'cd.teacher_id=?';  $params[] = $filterTeacher; }
@@ -127,12 +136,13 @@ if ($_SESSION['role_slug']==='teacher' && $teacher) {
 }
 $whereStr = implode(' AND ', $where);
 
-$total = $db->prepare("SELECT COUNT(*) FROM class_diary cd WHERE $whereStr");
+$total = $db->prepare("SELECT COUNT(*) FROM class_diary cd LEFT JOIN classes c ON cd.class_id=c.id WHERE $whereStr");
 $total->execute($params); $total = $total->fetchColumn();
 
-$stmt = $db->prepare("SELECT cd.*, c.class_name_bn, s.subject_name_bn, t.name_bn as teacher_name
+$stmt = $db->prepare("SELECT cd.*, c.class_name_bn, s.subject_name_bn, t.name_bn as teacher_name, d.division_name_bn
     FROM class_diary cd
     LEFT JOIN classes c ON cd.class_id=c.id
+    LEFT JOIN divisions d ON c.division_id=d.id
     LEFT JOIN subjects s ON cd.subject_id=s.id
     LEFT JOIN teachers t ON cd.teacher_id=t.id
     WHERE $whereStr ORDER BY cd.diary_date DESC, cd.created_at DESC
@@ -155,13 +165,26 @@ require_once ($_SESSION['role_slug']==='teacher') ? '../../includes/teacher_head
 <!-- Filter -->
 <div class="card mb-16 no-print">
     <div class="card-body" style="padding:12px 20px;">
-        <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <form method="GET" id="diaryFilter" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+            <input type="hidden" name="division_id" id="hiddenDivId" value="<?=$divisionId?>">
+            <div class="form-group" style="margin:0;flex:1;min-width:130px;">
+                <label style="font-size:12px;font-weight:600;">বিভাগ</label>
+                <select class="form-control" style="padding:7px;" onchange="onDivChange(this.value)">
+                    <option value="">সব বিভাগ</option>
+                    <?php foreach($divisions as $dv): ?>
+                    <option value="<?=$dv['id']?>" <?=$divisionId==$dv['id']?'selected':''?>><?=e($dv['division_name_bn'])?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="form-group" style="margin:0;flex:1;min-width:140px;">
                 <label style="font-size:12px;">শ্রেণী</label>
                 <select name="class_id" class="form-control" style="padding:7px;" onchange="this.form.submit()">
                     <option value="">সব শ্রেণী</option>
                     <?php foreach($classes as $c): ?>
-                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>><?=e($c['class_name_bn'])?></option>
+                    <option value="<?=$c['id']?>" <?=$filterClass==$c['id']?'selected':''?>>
+                        <?php if(!$divisionId): ?><?=e($c['division_name_bn']??'')?> → <?php endif; ?>
+                        <?=e($c['class_name_bn'])?>
+                    </option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -385,6 +408,11 @@ function viewDiary(d) {
     openModal('viewDiaryModal');
 }
 
+function onDivChange(divId) {
+    document.getElementById('hiddenDivId').value = divId;
+    document.querySelector('select[name="class_id"]').value = '';
+    document.getElementById('diaryFilter').submit();
+}
 function openEvalModal(diaryId, classId, subjectId, date, subjectName, className) {
     document.getElementById('evalDiaryId').value    = diaryId;
     document.getElementById('evalClassId').value    = classId;
