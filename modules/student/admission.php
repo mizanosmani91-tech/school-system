@@ -65,6 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $secExists->execute([$secretCode]);
         } while ($secExists->fetch());
 
+        // Unique Code — AN-STUD-XXXXXX-XXXXXX ফরম্যাটে
+        $uniqueCode = generateUniqueCode($db, 'student');
+
         // Roll Number
         $rollNo = $db->query("SELECT COALESCE(MAX(roll_number),0)+1 FROM students WHERE class_id=$classId AND academic_year='".date('Y')."'")->fetchColumn();
 
@@ -147,15 +150,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
              division_id, class_id, admission_class_id, section_id, academic_year, admission_year, admission_date,
              father_name, father_name_en, father_phone,
              mother_name, mother_name_en, mother_phone, guardian_phone, address_present,
-             previous_school, birth_certificate_no, photo, secret_code, status,
+             previous_school, birth_certificate_no, photo, secret_code, unique_code, status,
              monthly_fee, is_hostel, hostel_fee, is_hostel_food, food_fee, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
         $stmt->execute([
             $studentId, $rollNo, $name, $nameBn, $dob ?: null, $gender, $religion, $bloodGroup,
             $divisionId ?: null, $classId, $classId, $sectionId, date('Y'), $admissionYear, $admDate,
             $fatherName, $fatherNameEn, $fatherPhone,
             $motherName, $motherNameEn, $motherPhone, $guardianPhone, $address,
-            $prevSchool, $birthCert, $photo, $secretCode, 'active',
+            $prevSchool, $birthCert, $photo, $secretCode, $uniqueCode, 'active',
             $monthlyFee, $isHostel, $hostelFee, $isHostelFood, $foodFee
         ]);
         $newId = $db->lastInsertId();
@@ -172,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         logActivity($_SESSION['user_id'], 'student_admit', 'students', "ছাত্র ভর্তি: $name ($studentId)");
-        setFlash('success', "ছাত্র সফলভাবে ভর্তি হয়েছে! ID: $studentId | Secret Code: $secretCode");
+        setFlash('success', "ছাত্র সফলভাবে ভর্তি হয়েছে! ID: $studentId | Unique Code: $uniqueCode");
         header('Location: view.php?id=' . $newId);
         exit;
     }
