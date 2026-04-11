@@ -137,6 +137,63 @@ function generateStudentId($classId) {
     return 'STU-' . date('Y') . '-' . str_pad($classId, 2, '0', STR_PAD_LEFT) . str_pad($count + 1, 4, '0', STR_PAD_LEFT);
 }
 
+// ================================================================
+// Unique Code Generator (সকল role এর জন্য)
+// Format: AN-STUD-482193-XKPQMZ
+// ================================================================
+function generateUniqueCode($db, $type) {
+    $prefixMap = [
+        'student'     => 'AN-STUD',
+        'teacher'     => 'AN-TEAC',
+        'principal'   => 'AN-PRINC',
+        'staff'       => 'AN-STAFF',
+        'admin'       => 'AN-ADMIN',
+        'super_admin' => 'AN-SADM',
+    ];
+
+    $prefix = isset($prefixMap[$type])
+        ? $prefixMap[$type]
+        : 'AN-' . strtoupper(substr($type, 0, 5));
+
+    $digits  = '0123456789';
+    $letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    do {
+        // ৬টি র‍্যান্ডম সংখ্যা
+        $nums = '';
+        for ($i = 0; $i < 6; $i++) $nums .= $digits[rand(0, 9)];
+
+        // ৬টি র‍্যান্ডম বড় হাতের অক্ষর
+        $chars = '';
+        for ($i = 0; $i < 6; $i++) $chars .= $letters[rand(0, 25)];
+
+        $code = $prefix . '-' . $nums . '-' . $chars;
+
+        // সব table এ duplicate চেক
+        $exists = false;
+        $tables = [
+            ['students', 'unique_code'],
+            ['teachers', 'unique_code'],
+            ['staff',    'unique_code'],
+        ];
+        foreach ($tables as [$table, $col]) {
+            try {
+                $st = $db->prepare("SELECT id FROM $table WHERE $col = ? LIMIT 1");
+                $st->execute([$code]);
+                if ($st->fetch()) {
+                    $exists = true;
+                    break;
+                }
+            } catch (Exception $e) {
+                // table বা column না থাকলে skip করো
+            }
+        }
+
+    } while ($exists);
+
+    return $code;
+}
+
 // Pagination — FIXED: ? বা & সঠিকভাবে ব্যবহার করে
 function paginate($total, $perPage, $currentPage, $url) {
     $totalPages = ceil($total / $perPage);
