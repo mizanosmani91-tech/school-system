@@ -21,15 +21,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['add_teacher'])) {
         $uStmt->execute([$name,$nameBn,$phone,$phone,$hashedPw]);
         $userId = $db->lastInsertId();
         $teacherId = 'TCH-'.date('Y').'-'.str_pad($db->query("SELECT COUNT(*)+1 FROM teachers")->fetchColumn(),3,'0',STR_PAD_LEFT);
-        $tStmt = $db->prepare("INSERT INTO teachers (user_id,teacher_id_no,name,name_bn,phone,designation_bn,joining_date,salary,qualification,is_active) VALUES (?,?,?,?,?,?,?,?,?,1)");
-        $tStmt->execute([$userId,$teacherId,$name,$nameBn,$phone,$designation,$joining,$salary,$qualification]);
+
+        // Unique Code — AN-TEAC-XXXXXX-XXXXXX ফরম্যাটে
+        $uniqueCode = generateUniqueCode($db, 'teacher');
+
+        $tStmt = $db->prepare("INSERT INTO teachers (user_id,teacher_id_no,name,name_bn,phone,designation_bn,joining_date,salary,qualification,unique_code,is_active) VALUES (?,?,?,?,?,?,?,?,?,?,1)");
+        $tStmt->execute([$userId,$teacherId,$name,$nameBn,$phone,$designation,$joining,$salary,$qualification,$uniqueCode]);
 
         // Flash এর বদলে session এ রাখি — copy-box modal দেখাবে
         $_SESSION['new_teacher_info'] = [
-            'name' => $nameBn ?: $name,
-            'id'   => $teacherId,
-            'phone'=> $phone,
-            'pass' => $rawPassword,
+            'name'        => $nameBn ?: $name,
+            'id'          => $teacherId,
+            'unique_code' => $uniqueCode,
+            'phone'       => $phone,
+            'pass'        => $rawPassword,
         ];
     } else {
         setFlash('danger','নাম ও ফোন আবশ্যক।');
@@ -72,6 +77,7 @@ require_once '../../includes/header.php';
             <div style="background:var(--bg);border:2px dashed var(--border);border-radius:10px;padding:16px;font-family:monospace;font-size:14px;line-height:2;" id="teacherInfoText">
                 <div><span style="color:var(--text-muted);">নাম:</span> <strong><?= e($newTeacherInfo['name']) ?></strong></div>
                 <div><span style="color:var(--text-muted);">শিক্ষক ID:</span> <strong style="color:var(--primary);"><?= e($newTeacherInfo['id']) ?></strong></div>
+                <div><span style="color:var(--text-muted);">Unique Code:</span> <strong style="color:var(--success);"><?= e($newTeacherInfo['unique_code']) ?></strong></div>
                 <div><span style="color:var(--text-muted);">লগইন নম্বর:</span> <strong><?= e($newTeacherInfo['phone']) ?></strong></div>
                 <div><span style="color:var(--text-muted);">পাসওয়ার্ড:</span> <strong style="color:var(--danger);font-size:16px;letter-spacing:1px;"><?= e($newTeacherInfo['pass']) ?></strong></div>
             </div>
@@ -93,7 +99,7 @@ require_once '../../includes/header.php';
 </div>
 <script>
 function copyTeacherInfo() {
-    const text = `নাম: <?= e($newTeacherInfo['name']) ?>\nশিক্ষক ID: <?= e($newTeacherInfo['id']) ?>\nলগইন নম্বর: <?= e($newTeacherInfo['phone']) ?>\nপাসওয়ার্ড: <?= e($newTeacherInfo['pass']) ?>`;
+    const text = `নাম: <?= e($newTeacherInfo['name']) ?>\nশিক্ষক ID: <?= e($newTeacherInfo['id']) ?>\nUnique Code: <?= e($newTeacherInfo['unique_code']) ?>\nলগইন নম্বর: <?= e($newTeacherInfo['phone']) ?>\nপাসওয়ার্ড: <?= e($newTeacherInfo['pass']) ?>`;
     navigator.clipboard.writeText(text).then(() => {
         const btn = document.getElementById('copyBtn');
         btn.innerHTML = '<i class="fas fa-check"></i> কপি হয়েছে!';
@@ -140,11 +146,13 @@ function copyTeacherInfo() {
                         <div style="display:flex;align-items:center;gap:10px;">
                             <div class="avatar"><?=mb_substr($t['name_bn']??$t['name'],0,1)?></div>
                             <div>
-                                <!-- ✅ নামে ক্লিক করলে প্রোফাইলে যাবে -->
                                 <a href="profile.php?id=<?=$t['id']?>" style="font-weight:700;font-size:14px;color:var(--primary);text-decoration:none;" title="প্রোফাইল দেখুন">
                                     <?=e($t['name_bn']??$t['name'])?>
                                 </a>
                                 <div style="font-size:11px;color:var(--text-muted);">ID: <?=e($t['teacher_id_no'])?></div>
+                                <?php if (!empty($t['unique_code'])): ?>
+                                <div style="font-size:11px;color:var(--success);font-weight:600;"><?=e($t['unique_code'])?></div>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </td>
